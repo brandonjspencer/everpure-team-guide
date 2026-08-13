@@ -5,14 +5,8 @@ exploring what the content intelligence layer knows. (For building/running the p
 see the [main repo's README](https://github.com/brandonjspencer/everpure-artifact-intelligence#readme).)
 
 **What this system knows:** every marketing and technical artifact on everpuredata.com, plus
-blog.everpuredata.com — **5,199 classified** (100% JTBD-enriched), of which **3,767 are
-currently retrievable** (avg. classification confidence **0.826**) through search, recommend,
-similar, random, and journeys. The other ~1,432 are marked `gone` or `redirected` — pages the
-CMS has since unpublished or bounced elsewhere — and stay fully classified and inspectable via
-`GET /artifacts` (browse) and `GET /coverage/jtbd`, just excluded from anything that would
-actually point someone at a link. See gotcha #8. (Confidence across *all* classified content,
-retrievable or not, averages lower — **0.714** — content that got retired skewed
-lower-confidence to begin with.)
+blog.everpuredata.com — **3,767 available artifacts** (100% JTBD-enriched, avg. classification
+confidence **0.826**)
 
 Each artifact is deeply analyzed for:
 
@@ -75,7 +69,6 @@ comma-separated multi-values (`?type=ebook,video`); results are paginated.
 | `persona` | `economic-buyer`, `technical-buyer`, `user-buyer`, `champion`, `influencer` | Classic buyer persona |
 | `technicalDepth` | `executive`, `practitioner`, `technical`, `developer` | How deep it goes |
 | `accessTier` | `public`, `gated` | Lead-gate status |
-| `sourceStatus` | `live`, `redirected`, `gone`, `newly-ungated`, `newly-gated` | Crawl-time reachability — see gotcha #8 before assuming this defaults to `live`-only |
 | `ageBucket` / `stalenessRisk` | `current`…`archived` / `low`…`critical` | Freshness |
 | `publishedAfter` / `publishedBefore` | ISO dates | Publish window |
 | `fields` | comma-separated field names | Sparse responses (id always included) |
@@ -203,10 +196,6 @@ assets) and the `end_user` persona (**1.08%**, 56 assets) are both **critical** 
 thin. The two critical gaps haven't moved at all across the last content cycle — zero new
 purchase-phase or `end_user` assets shipped — while the corpus grew elsewhere, which is itself
 the finding: these gaps won't close on their own.
-
-Coverage counts everything **classified**, including any artifact currently `gone` or
-`redirected` (see gotcha #8) — this endpoint answers "what has the content team produced,
-ever," not "what's live right now."
 
 ### 2.6 Taxonomy & vocabularies
 
@@ -435,14 +424,6 @@ Recommendation results also carry a ⚠ flag on brand-stale items.
    Retry once before reporting an outage.
 7. **Everything read-only unless your key says otherwise** — 403s on PATCH/POST-to-save are
    scope, not bugs.
-8. **`gone`/`redirected` content is visible in different places than you'd expect.**
-   `GET /artifacts` (browse) and `GET /coverage/jtbd` show it by default — browse is the
-   deliberate escape hatch for inspecting retired content, and coverage is reporting on
-   everything ever classified. `POST /artifacts/search`, `find_similar`, `random`, and every
-   `recommend`/`build_journey` call exclude it — those are "what can I actually point someone
-   at" paths. Retired rows keep their classification and embedding (nothing is deleted), so
-   this is about visibility, not data loss. Filter `sourceStatus=live` on a browse call if you
-   want parity with what search/recommend would return.
 
 ## 6. Reporting issues
 
