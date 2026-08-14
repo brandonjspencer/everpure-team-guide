@@ -35,7 +35,10 @@ Postman) and an **MCP server** (for AI agents — Claude Desktop, Claude Code, c
 | OpenAPI spec | [`/openapi.json`](https://everpure-artifact-api.onrender.com/openapi.json) — import into Postman/Insomnia for a ready-made collection |
 | Health check | [`GET /v1/health`](https://everpure-artifact-api.onrender.com/v1/health) — no auth required |
 
-> **Free-tier note:** this deployment spins down after ~15 minutes of inactivity. The first request after a lull can take 30–60 seconds to respond — that's normal, not an outage. Retry once before reporting a problem.
+> **Free-tier note:** a scheduled health check keeps the REST API warm on weekdays, roughly
+> 6am–6pm Pacific, so it responds quickly during business hours. Outside that window it spins
+> down after ~15 minutes idle, and the first request after that takes 30–60 seconds to respond
+> — that's normal, not an outage. Retry once before reporting a problem.
 
 **60-second smoke test:**
 
@@ -263,8 +266,8 @@ takes a server URL directly — no local install at all if it supports a bearer 
 Steps vary by account/version, so this is worth checking live rather than following a fixed
 click-path here.
 
-> Free-tier note: the first tool call after a lull can take up to a minute while the service
-> wakes back up — same as the REST API.
+> Free-tier note: unlike the REST API, the MCP server isn't kept warm — the first tool call
+> after any lull, any time of day, can take up to a minute while it wakes back up.
 
 **Any other MCP client that speaks HTTP + custom headers** can use the same shape Claude Code's
 command produces under the hood:
@@ -420,8 +423,9 @@ Recommendation results also carry a ⚠ flag on brand-stale items.
    results still come back, just less semantically sharp.
 5. **Gated content is included by default** in most reads; filter `accessTier=public` or use
    `publicOnly` in journey builds if you only want ungated assets.
-6. **Free-tier hosting may cold-start** — the first request after idle can take ~30–60s.
-   Retry once before reporting an outage.
+6. **Free-tier hosting may cold-start.** The REST API is kept warm on weekdays, ~6am–6pm
+   Pacific (see §1); outside that window, and on the MCP server at any time (see §3.1), the
+   first request after idle can take ~30–60s. Retry once before reporting an outage.
 7. **Everything read-only unless your key says otherwise** — 403s on PATCH/POST-to-save are
    scope, not bugs.
 
