@@ -1,0 +1,11 @@
+{
+  "name": "everpure-team-guide",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "marked": "^14.1.0"
+  }
+}
