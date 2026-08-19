@@ -12,7 +12,15 @@ don't have one yet, request one from Brandon (email: bspencer@everpuredata.com, 
 @Brandon) — each teammate gets their own key, not a shared one. Don't continue until you have
 it in hand — you'll need it in Step 4.
 
-## Step 2 — Confirm Claude Code is installed
+## Step 2 — Open a terminal, then confirm Claude Code is installed
+
+**macOS:** press **Cmd + Space**, type `Terminal`, press **Enter**.
+
+**Windows:** press the **Windows key**, type `PowerShell`, press **Enter**.
+
+Keep that window open — you'll use the same one for every step below.
+
+In it, run:
 
 ```bash
 claude --version
@@ -44,7 +52,9 @@ Get-Content "$env:APPDATA\Claude\claude_desktop_config.json" -ErrorAction Silent
 
 ## Step 4 — Start Claude Code and paste this in
 
-Replace `PASTE_MY_KEY_HERE` with your personal API key from Step 1 before sending:
+In the same terminal window, type `claude` and press **Enter** to start a session.
+
+Replace `PASTE_MY_KEY_HERE` with your personal API key from Step 1, then paste this in and send it:
 
 > Run this exact command for me, then show me the output:
 >
