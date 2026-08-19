@@ -167,6 +167,17 @@ const PAGES = [
     metaLabel: 'JTBD Catalog v1.1',
     sourceLabel: 'jtbd-catalog.md',
   },
+  {
+    source: 'mcp-desktop-setup.md',
+    out: 'mcp-desktop-setup.html',
+    title: 'Connecting Claude Desktop via Claude Code — Everpure',
+    description: 'Installing the Everpure MCP server in Claude Desktop when custom-MCP install is disabled in the UI.',
+    eyebrow: 'Content Intelligence &middot; MCP Setup',
+    h1: 'Connecting Claude Desktop via Claude Code',
+    subtitle: 'For admin-managed machines where the custom-MCP install UI is disabled.',
+    metaLabel: 'MCP Setup',
+    sourceLabel: 'mcp-desktop-setup.md',
+  },
 ]
 
 function lastUpdated(source) {

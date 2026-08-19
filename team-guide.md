@@ -294,13 +294,20 @@ creates it if it doesn't exist yet):
 }
 ```
 
+> **Admin-managed machine, UI disabled?** If your org has turned off Desktop's custom-MCP-install
+> UI, Settings → Developer → Edit Config isn't available to you. See
+> [Connecting Claude Desktop via Claude Code](./mcp-desktop-setup.html) for the workaround —
+> Claude Code edits the same config file directly instead.
+
 **claude.ai (browser):** check **Settings → Connectors** for a custom-connector option that
 takes a server URL directly — no local install at all if it supports a bearer token there.
 Steps vary by account/version, so this is worth checking live rather than following a fixed
 click-path here.
 
-> Free-tier note: unlike the REST API, the MCP server isn't kept warm — the first tool call
-> after any lull, any time of day, can take up to a minute while it wakes back up.
+> Free-tier note: the MCP server has no dedicated health check of its own, but in practice it's
+> usually already warm during work hours — MapStack's own traffic keeps it hot as a side effect.
+> Outside work hours, or on a stretch where MapStack itself has been quiet, the first tool call
+> can still take up to a minute while it wakes back up.
 
 **Any other MCP client that speaks HTTP + custom headers** can use the same shape Claude Code's
 command produces under the hood:
@@ -461,8 +468,10 @@ Recommendation results also carry a ⚠ flag on brand-stale items.
 5. **Gated content is included by default** in most reads; filter `accessTier=public` or use
    `publicOnly` in journey builds if you only want ungated assets.
 6. **Free-tier hosting may cold-start.** The REST API is kept warm on weekdays, ~6am–6pm
-   Pacific (see §1); outside that window, and on the MCP server at any time (see §3.1), the
-   first request after idle can take ~30–60s. Retry once before reporting an outage.
+   Pacific (see §1). The MCP server has no health check of its own, but is usually warm across
+   that same window too — MapStack's regular traffic keeps it hot incidentally (see §3.1).
+   Outside work hours, or whenever that ambient traffic hasn't happened recently, the first
+   request after idle can take ~30–60s. Retry once before reporting an outage.
 7. **Everything read-only unless your key says otherwise** — 403s on PATCH/POST-to-save are
    scope, not bugs.
 8. **`gone` content is fully removed; `redirected`/`newly-gated` are not.** As of 2026-08-18,
