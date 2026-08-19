@@ -5,8 +5,9 @@ exploring what the content intelligence layer knows. (For building/running the p
 see the [main repo's README](https://github.com/brandonjspencer/everpure-artifact-intelligence#readme).)
 
 **What this system knows:** every marketing and technical artifact on everpuredata.com, plus
-blog.everpuredata.com — **3,767 available artifacts** (100% JTBD-enriched, avg. classification
-confidence **0.826**)
+blog.everpuredata.com — **4,419 available artifacts** (100% JTBD-enriched, avg. classification
+confidence **0.774**; as of 2026-08-18, this figure covers the whole corpus — permanently-dead
+`gone` artifacts are no longer counted at all, not just excluded from "available")
 
 Each artifact is deeply analyzed for:
 
@@ -64,9 +65,9 @@ comma-separated multi-values (`?type=ebook,video`); results are paginated.
 | `type` | `whitepaper`, `ebook`, `case-study`, `video`, `webinar`, `datasheet`, `blog-post`, `reference-architecture`, `product-page`, … | Content format |
 | `stage` | `awareness`, `education`, `consideration`, `decision`, `validation`, `expansion`, `advocacy` | Funnel buying stage |
 | `phase` | `problem_identification`, `solution_exploration`, `requirements_building`, `validation`, `consensus_creation`, `supplier_selection`, `purchase` | B2B buying-process phase (Gartner-style committee work) |
-| `job` | JTBD catalog slugs, e.g. `survive-a-ransomware-attack` — full 18-job list: [jtbd-catalog.md](./jtbd-catalog.md) (or the `get_jtbd_catalog` MCP tool) | The buyer progress the content serves |
+| `job` | JTBD catalog slugs, e.g. `survive-a-ransomware-attack` — full 18-job list: [jtbd-catalog.md](./jtbd-catalog.html) (or the `get_jtbd_catalog` MCP tool) | The buyer progress the content serves |
 | `force` | `push`, `pull`, `anxiety`, `habit` | Demand-side force the content acts on |
-| `committeePersona` | `economic_buyer`, `infrastructure_owner`, `technical_evaluator`, `security_compliance`, `end_user`, `executive_sponsor`, `champion`, `procurement`, `ai_platform_owner` | Buying-committee role targeted |
+| `committeePersona` | `technical_leader`, `non_technical_leader`, `infrastructure_owner`, `technical_infra_operator`, `platform_engineering`, `security_owner`, `procurement_finance_sustainability`, `enterprise_ai_leader`, `data_leader` — full behavioral detail on each: [personaReference.ts](https://github.com/brandonjspencer/everpure-artifact-intelligence/blob/main/src/config/personaReference.ts) (or the `get_persona_reference` MCP tool) | Buying-committee role targeted |
 | `product` / `solution` / `industry` / `topic` | Taxonomy slugs (`GET /taxonomy` for the canonical lists), or a common synonym — see §2.6 | Subject matter |
 | `audience` | `c-suite`, `vp-director`, `manager`, `individual-contributor`, `technical-architect`, `developer`, `end-user` | Reader level |
 | `persona` | `economic-buyer`, `technical-buyer`, `user-buyer`, `champion`, `influencer` | Classic buyer persona |
@@ -82,9 +83,10 @@ comma-separated multi-values (`?type=ebook,video`); results are paginated.
 curl -s -H "x-api-key: $EVERPURE_API_KEY" \
   "$EVERPURE_API/artifacts?industry=healthcare&type=case-study&limit=10"
 
-# Anxiety-reducing proof content aimed at the security owner, serving the validation phase (460 today)
+# Anxiety-reducing proof content aimed at the Security Owner, serving the validation phase
+# (406 in the corpus today)
 curl -s -H "x-api-key: $EVERPURE_API_KEY" \
-  "$EVERPURE_API/artifacts?committeePersona=security_compliance&force=anxiety&phase=validation"
+  "$EVERPURE_API/artifacts?committeePersona=security_owner&force=anxiety&phase=validation"
 ```
 
 Related single-artifact reads:
@@ -149,6 +151,13 @@ Profile fields worth knowing:
   "have they visited before" signal for `cta` below.
 - `hasWatchedDemo` — boolean; feeds `cta` below. Only meaningful once `engagedArtifactIds` is
   non-empty.
+- `journeyContext.precedingArtifactId` — the artifact you just showed this prospect. When set,
+  each recommendation gets a **verified** click-path signal: `navigation: { linkVerified,
+  verifiedTargetUrl, suggestedCta }`. `linkVerified` is `true` only when a real `<a href>` on the
+  preceding artifact's page (captured at crawl time) resolves to the recommended artifact's
+  canonical URL — never inferred from topic/stage similarity. `suggestedCta` is always present
+  and honest either way: a click-through line when verified, or "share this resource directly"
+  when not. Omitted entirely if `precedingArtifactId` isn't supplied.
 
 **Every response carries a `cta` block** — the next action to point the prospect at, not just
 content: `{ "action": "pathfinder" | "demo" | "meeting", "rationale": "...", "chatAvailable":
@@ -187,18 +196,40 @@ Journeys can also be **saved** (`POST /journeys` with a `name`, needs a write-sc
 then monitored: `GET /journeys/:id/health` flags steps whose artifact has gone away, changed,
 been reclassified out of its slot, become gated, or picked up brand issues.
 
+Each step (from the second onward) carries the same **verified** click-path signal as
+`/artifacts/recommend` above (`navigation: { linkVerified, verifiedTargetUrl, suggestedCta }`),
+computed server-side between consecutive steps — no request field needed, unlike the recommend
+endpoint. Absent on the first step (nothing precedes it to check).
+
 ### 2.5 Coverage & gaps — `GET /coverage/jtbd`
 
 The Content Map engine: how well the corpus covers every job, phase, force, persona, and
 dimension — zero-filled (a value with no coverage still appears), with an 18×7 job-by-phase
 grid and a severity-flagged gap list (`missing` = zero assets, `critical` < 2%, `low` < 5%).
 
-Today's headline findings, straight from the endpoint: purchase-phase content (**1.58%**, 82
-assets) and the `end_user` persona (**1.08%**, 56 assets) are both **critical** gaps, and
-`procurement` (3.42%, 178 assets) + the `escape-hypervisor-lock-in` job (4.19%, 218 assets) are
-thin. The two critical gaps haven't moved at all across the last content cycle — zero new
-purchase-phase or `end_user` assets shipped — while the corpus grew elsewhere, which is itself
-the finding: these gaps won't close on their own.
+**Numbers below are current as of 2026-08-18**, after the persona-taxonomy reclassification
+finished and 1,528 `gone` (dead-link) artifacts were permanently removed from the corpus —
+4,419 artifacts remain, 100% enriched, averaging 0.774 classification confidence.
+
+Today's headline findings, straight from the endpoint: the `purchase` phase (90 assets, 2.0%)
+and the `build-a-practice-on-the-platform` job (90 assets, 2.0%) are the thinnest coverage
+points, and the `habit` demand-force (158 assets, 3.6%) is newly exposed as thin now that dead
+content no longer pads the denominator. None of these are flagged **critical** (< 2%) anymore,
+but all three sit right at the **low** (< 5%) line and are worth watching, not ignoring.
+
+Committee-persona coverage, current buying-committee taxonomy (§2.1):
+
+| Persona | Assets | Share |
+|---|---|---|
+| Technical infra operator | 3,249 | 73.5% |
+| Infrastructure owner | 3,006 | 68.0% |
+| Technical leader | 2,177 | 49.3% |
+| Platform engineering | 1,980 | 44.8% |
+| Security owner | 797 | 18.0% |
+| Procurement / finance / sustainability | 670 | 15.2% |
+| Enterprise AI leader | 447 | 10.1% |
+| Data leader | 346 | 7.8% |
+| Non-technical leader | 291 | 6.6% |
 
 ### 2.6 Taxonomy & vocabularies
 
@@ -207,7 +238,9 @@ the finding: these gaps won't close on their own.
 - `GET /taxonomy/stage-crosswalk` — the canonical translation between the three stage
   vocabularies (buying-process phases ↔ JTBD timeline ↔ funnel stages), each phase with its
   dominant forces. Use it whenever an ask arrives in one dialect and your filter needs another.
-- The 18-job JTBD catalog: [jtbd-catalog.md](./jtbd-catalog.md)
+- `GET /taxonomy/persona-reference` — full behavioral detail (roles, priorities, decision
+  criteria, messaging do/don't) for each of the 9 `committeePersona` values.
+- The 18-job JTBD catalog: [jtbd-catalog.md](./jtbd-catalog.html)
 
 **Synonyms resolve automatically.** `product` / `solution` / `industry` / `topic` filters (on
 `GET /artifacts`, `POST /artifacts/search`, `find_artifacts`) and the `industry` field on
@@ -298,7 +331,7 @@ command produces under the hood:
 }
 ```
 
-### 3.2 The 13 tools
+### 3.2 The 16 tools
 
 | Tool | Ask it like… |
 |---|---|
@@ -307,14 +340,17 @@ command produces under the hood:
 | `find_similar` | "Are there other pieces like this one, but for a less technical audience?" |
 | `recommend_for_prospect` | "What should I send a VP of IT at a bank who's skeptical after a bad vendor experience?" |
 | `build_journey` | "Build a 5-touch sequence from awareness to decision for a data-engineering audience" — or pass `phases` for a buying-committee path |
+| `journey_health` | "Is this journey still safe to send? Any gone/brand-flagged steps?" |
 | `get_taxonomy` | "What industries do we have content for?" |
 | `get_jtbd_catalog` | "Which job matches a buyer struggling with GPU utilization?" |
 | `get_stage_crosswalk` | "Which buying-process phases does 'awareness content' correspond to?" |
+| `get_persona_reference` | "What does a Security Owner care about?" / "How do I pitch a Data Leader?" |
 | `analyze_content_coverage` | "Where are our content gaps?" / "Which jobs have no purchase-phase coverage?" |
 | `generate_content_brief` | "What content should we create next?" / "Turn our coverage gaps into recommendations" |
 | `analyze_corpus_gaps` | "What topics keep coming up that we haven't formally tagged?" |
 | `analyze_sitemap_structure` | "What's new on the site that we haven't classified yet?" / "Show me everything under /resources/" |
 | `check_brand_compliance` | "Is this artifact safe to share, brand-wise?" |
+| `brand_compliance_summary` | "How much of the corpus still needs a brand-name update?" |
 
 Plus two ambient **resources** an agent can read as context: `everpure://taxonomy` and
 `everpure://library-summary`.
@@ -366,23 +402,24 @@ gated, or was reclassified.
 
 **Use:** `GET /artifacts?committeePersona=…&force=…&phase=…`
 
-The committee lens is fully filterable. Real examples:
+The committee lens is fully filterable against the real Pure Storage buying-committee taxonomy
+(§2.1; full behavioral detail via `GET /taxonomy/persona-reference` or `get_persona_reference`).
+Example query: Security Owner, risk-reduction proof, validation phase →
+`committeePersona=security_owner&force=anxiety&phase=validation`.
 
-- Security owner, risk-reduction proof, validation phase → **460 assets** to pick from
-  (`committeePersona=security_compliance&force=anxiety&phase=validation`)
-- Procurement + habit-breaking content → **26 assets** (`force=habit&committeePersona=procurement`) —
-  thin, and that thinness is itself useful intel for the content team.
+That example query currently matches **406 assets** (2026-08-18).
 
 ### 4.4 Content strategy — the quarterly gap review
 
 **Use:** `GET /coverage/jtbd` or the `analyze_content_coverage` MCP tool.
 
 One call answers "what should we create next?": which of the 18 jobs are under-covered, which
-buying phases have holes (purchase: 1.58%), which committee personas we barely speak to
-(`end_user`: 56 assets), and the per-job × per-phase grid showing exactly which combinations
-have **zero** coverage. `generate_content_brief` turns those same gaps directly into suggested
-formats and rationales — no separate analysis step needed. `analyze_corpus_gaps` complements
-both with emergent topics that keep appearing in content but aren't formally tagged yet.
+buying phases have holes (purchase: 2.0%, 90 assets), which committee personas we barely speak
+to (non-technical leader: 6.6%, data leader: 7.8% — full breakdown in §2.5), and the per-job ×
+per-phase grid showing exactly which combinations have **zero** coverage.
+`generate_content_brief` turns those same gaps directly into suggested formats and
+rationales — no separate analysis step needed. `analyze_corpus_gaps` complements both with
+emergent topics that keep appearing in content but aren't formally tagged yet.
 
 ### 4.5 Journey strategy — the Content Map
 
@@ -428,6 +465,29 @@ Recommendation results also carry a ⚠ flag on brand-stale items.
    first request after idle can take ~30–60s. Retry once before reporting an outage.
 7. **Everything read-only unless your key says otherwise** — 403s on PATCH/POST-to-save are
    scope, not bugs.
+8. **`gone` content is fully removed; `redirected`/`newly-gated` are not.** As of 2026-08-18,
+   the 1,528 artifacts whose source had gone permanently dead (`sourceStatus=gone`) were
+   removed from the corpus entirely — they no longer appear anywhere, including browse and
+   coverage. `redirected`/`newly-gated` content is still handled the old way: `GET /artifacts`
+   (browse) and `GET /coverage/jtbd` show it by default — browse is the deliberate escape hatch
+   for inspecting retired-but-not-dead content, and coverage reports on everything still
+   classified. `POST /artifacts/search`, `find_similar`, `random`, and every
+   `recommend`/`build_journey` call exclude both categories — those are "what can I actually
+   point someone at" paths. Filter `sourceStatus=live` on a browse call if you want parity with
+   what search/recommend would return.
+9. **Ranking may briefly lag on 48 recently corrected artifacts.** Until 2026-08-13
+   ingestion took the first PDF link on a page as that page's own document, so an article
+   that cites an outside report could absorb that report's full text — which is what
+   search ranking and taxonomy read. The pipeline now only merges documents served from
+   our own domains, and the 48 affected rows (of ~5,200) were corrected on 2026-08-13:
+   6.7M characters of other companies' documents removed, 87% of the stored text on those
+   rows. Nothing was deleted — only the borrowed text. Their classification and embedding
+   are being rebuilt from the corrected text, so until that finishes a handful of these can
+   still rank on vocabulary that reads like somebody else's paper. Worth reporting with the
+   URL if you see it. Same cleanup: 44 artifacts that had archived a cited third party's PDF
+   now return `storedAssetPath: null` — we no longer serve another company's document as an
+   Everpure asset. The citation itself is still recorded, and no first-party asset was
+   affected.
 
 ## 6. Reporting issues
 

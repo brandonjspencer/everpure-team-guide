@@ -2,38 +2,9 @@ import { readFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { marked } from 'marked'
 
-const SOURCE = 'team-guide.md'
 const OUT_DIR = 'public'
 
-const raw = readFileSync(SOURCE, 'utf8')
-
-// The page renders its own styled header, so drop the leading `# Title` line
-// from the source before handing the rest to marked.
-const body = raw.replace(/^#\s+.*\n+/, '')
-
-let updated
-try {
-  updated = execSync(`git log -1 --format=%ad --date=format:"%B %-d, %Y" -- ${SOURCE}`, {
-    encoding: 'utf8',
-  }).trim()
-} catch {
-  updated = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-}
-if (!updated) {
-  updated = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-}
-
-marked.setOptions({ gfm: true })
-const html = marked.parse(body)
-
-const page = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Everpure Artifact Intelligence — Team Guide</title>
-<meta name="description" content="Using the Everpure Artifact Intelligence API &amp; MCP server — reference, setup, and practical use cases.">
-<style>
+const STYLE = `
 :root {
   --bg: #eeeee6;
   --panel: #f6f6f0;
@@ -168,27 +139,87 @@ footer {
   color: var(--muted);
 }
 footer a { color: var(--link); }
-</style>
+`
+
+marked.setOptions({ gfm: true })
+
+/** One rendered page: a source markdown file plus the styled header it gets wrapped in. */
+const PAGES = [
+  {
+    source: 'team-guide.md',
+    out: 'index.html',
+    title: 'Everpure Artifact Intelligence — Team Guide',
+    description: 'Using the Everpure Artifact Intelligence API & MCP server — reference, setup, and practical use cases.',
+    eyebrow: 'Content Intelligence &middot; Team Guide',
+    h1: 'Everpure Artifact Intelligence',
+    subtitle: 'Using the API &amp; MCP server — reference, setup, and practical use cases.',
+    metaLabel: 'REST API + MCP',
+    sourceLabel: 'team-guide.md',
+  },
+  {
+    source: 'jtbd-catalog.md',
+    out: 'jtbd-catalog.html',
+    title: 'Everpure JTBD Catalog',
+    description: "The 18 jobs-to-be-done Everpure's content library is classified against.",
+    eyebrow: 'Content Intelligence &middot; JTBD Catalog',
+    h1: 'Everpure JTBD Catalog',
+    subtitle: 'The 18 circumstance-anchored jobs the corpus is classified against.',
+    metaLabel: 'JTBD Catalog v1.1',
+    sourceLabel: 'jtbd-catalog.md',
+  },
+]
+
+function lastUpdated(source) {
+  try {
+    const date = execSync(`git log -1 --format=%ad --date=format:"%B %-d, %Y" -- ${source}`, {
+      encoding: 'utf8',
+    }).trim()
+    if (date) return date
+  } catch {
+    // fall through to today's date
+  }
+  return new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+}
+
+function renderPage(page) {
+  const raw = readFileSync(page.source, 'utf8')
+  // The page renders its own styled header, so drop the leading `# Title` line
+  // from the source before handing the rest to marked.
+  const body = raw.replace(/^#\s+.*\n+/, '')
+  const html = marked.parse(body)
+  const updated = lastUpdated(page.source)
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${page.title}</title>
+<meta name="description" content="${page.description}">
+<style>${STYLE}</style>
 </head>
 <body>
 <main>
-  <p class="eyebrow">Content Intelligence &middot; Team Guide</p>
-  <h1>Everpure Artifact Intelligence</h1>
-  <p class="subtitle">Using the API &amp; MCP server — reference, setup, and practical use cases.</p>
+  <p class="eyebrow">${page.eyebrow}</p>
+  <h1>${page.h1}</h1>
+  <p class="subtitle">${page.subtitle}</p>
   <hr class="rule">
-  <p class="meta">REST API + MCP<span class="sep">&bull;</span>Updated ${updated}</p>
+  <p class="meta">${page.metaLabel}<span class="sep">&bull;</span>Updated ${updated}</p>
   <article>
 ${html}
   </article>
   <footer>
-    Source: <a href="https://github.com/brandonjspencer/everpure-team-guide/blob/main/team-guide.md">team-guide.md</a>
+    Source: <a href="https://github.com/brandonjspencer/everpure-team-guide/blob/main/${page.sourceLabel}">${page.sourceLabel}</a>
     &nbsp;&middot;&nbsp; Rebuilt automatically on every update.
   </footer>
 </main>
 </body>
 </html>
 `
+}
 
 mkdirSync(OUT_DIR, { recursive: true })
-writeFileSync(`${OUT_DIR}/index.html`, page)
-console.log(`Wrote ${OUT_DIR}/index.html (updated: ${updated})`)
+for (const page of PAGES) {
+  writeFileSync(`${OUT_DIR}/${page.out}`, renderPage(page))
+  console.log(`Wrote ${OUT_DIR}/${page.out}`)
+}

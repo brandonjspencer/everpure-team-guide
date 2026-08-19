@@ -4,27 +4,31 @@
 > Grammar: every job is circumstance-anchored progress ("When … I want to … so I can …"),
 > product-free, with functional / emotional / social dimensions per the `jobs-to-be-done` skill.
 > ★ = extends the starter library in the skill's Everpure bridge.
+> **Personas v1.1 (2026-08-14):** job statements/slugs/dimensions/forces unchanged; the
+> "Primary personas" column was remapped from the old 9 generic JTBD_PERSONAS slugs to the real
+> Pure Storage buying-committee taxonomy — see `src/config/personaReference.ts` for full
+> behavioral detail on each persona.
 
 | # | Slug | Forces | Primary personas |
 |---|------|--------|------------------|
-| 1 | `modernize-without-a-reset` ★ | push, anxiety | technical_evaluator, infrastructure_owner |
-| 2 | `survive-a-ransomware-attack` ★ | anxiety, push | security_compliance, infrastructure_owner |
+| 1 | `modernize-without-a-reset` ★ | push, anxiety | technical_leader, technical_infra_operator |
+| 2 | `survive-a-ransomware-attack` ★ | anxiety, push | security_owner, infrastructure_owner |
 | 3 | `keep-the-business-always-on` | anxiety, habit | infrastructure_owner |
-| 4 | `govern-data-for-ai` ★ | anxiety | security_compliance |
-| 5 | `keep-the-gpus-fed` ★ | push, pull | ai_platform_owner |
-| 6 | `get-ai-from-pilot-to-production` | pull, anxiety | executive_sponsor |
-| 7 | `de-risk-the-vendor-switch` ★ | anxiety, habit | technical_evaluator |
-| 8 | `escape-hypervisor-lock-in` | push, anxiety | technical_evaluator, economic_buyer |
-| 9 | `cut-power-space-and-carbon` | push, pull | economic_buyer, infrastructure_owner |
-| 10 | `do-more-with-a-flat-team` | push | infrastructure_owner, end_user |
-| 11 | `consolidate-the-sprawl` | push | technical_evaluator |
-| 12 | `make-storage-costs-predictable` | push, pull | economic_buyer, procurement |
-| 13 | `guarantee-critical-app-performance` | push, anxiety | infrastructure_owner, end_user |
-| 14 | `run-stateful-apps-on-kubernetes` | pull, anxiety | technical_evaluator, end_user |
-| 15 | `operate-data-across-clouds` | pull, anxiety | technical_evaluator |
-| 16 | `absorb-relentless-data-growth` | push | infrastructure_owner, ai_platform_owner |
-| 17 | `make-a-defensible-technology-choice` | anxiety, social | technical_evaluator |
-| 18 | `build-a-practice-on-the-platform` | pull, anxiety | champion (partner) |
+| 4 | `govern-data-for-ai` ★ | anxiety | data_leader, security_owner |
+| 5 | `keep-the-gpus-fed` ★ | push, pull | platform_engineering, enterprise_ai_leader |
+| 6 | `get-ai-from-pilot-to-production` | pull, anxiety | enterprise_ai_leader |
+| 7 | `de-risk-the-vendor-switch` ★ | anxiety, habit | technical_infra_operator |
+| 8 | `escape-hypervisor-lock-in` | push, anxiety | platform_engineering, technical_leader |
+| 9 | `cut-power-space-and-carbon` | push, pull | procurement_finance_sustainability, technical_leader |
+| 10 | `do-more-with-a-flat-team` | push | infrastructure_owner, platform_engineering |
+| 11 | `consolidate-the-sprawl` | push | technical_infra_operator |
+| 12 | `make-storage-costs-predictable` | push, pull | procurement_finance_sustainability, technical_leader |
+| 13 | `guarantee-critical-app-performance` | push, anxiety | infrastructure_owner, technical_infra_operator |
+| 14 | `run-stateful-apps-on-kubernetes` | pull, anxiety | platform_engineering, technical_infra_operator |
+| 15 | `operate-data-across-clouds` | pull, anxiety | technical_leader, platform_engineering |
+| 16 | `absorb-relentless-data-growth` | push | infrastructure_owner, data_leader |
+| 17 | `make-a-defensible-technology-choice` | anxiety, social | technical_infra_operator |
+| 18 | `build-a-practice-on-the-platform` | pull, anxiety | platform_engineering (imperfect fit — this job is about a channel partner, not a buying-committee persona) |
 
 ---
 
