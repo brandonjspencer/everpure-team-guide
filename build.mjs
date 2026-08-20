@@ -1,4 +1,4 @@
-import { readFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { readFileSync, mkdirSync, writeFileSync, cpSync, existsSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { marked } from 'marked'
 
@@ -197,6 +197,25 @@ footer a { color: var(--link); }
 
 marked.setOptions({ gfm: true })
 
+// marked doesn't add heading ids by default, so in-page anchor links (e.g. a "jump to the
+// alternative method" link) silently go nowhere. Slugify headings the same way GitHub does.
+function slugify(text) {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+}
+marked.use({
+  renderer: {
+    heading({ tokens, depth }) {
+      const text = this.parser.parseInline(tokens)
+      const slug = slugify(text.replace(/<[^>]*>/g, ''))
+      return `<h${depth} id="${slug}">${text}</h${depth}>\n`
+    },
+  },
+})
+
 const KEY_PLACEHOLDER = 'PASTE_MY_KEY_HERE'
 
 const CLIPBOARD_ICON =
@@ -369,4 +388,10 @@ mkdirSync(OUT_DIR, { recursive: true })
 for (const page of PAGES) {
   writeFileSync(`${OUT_DIR}/${page.out}`, renderPage(page))
   console.log(`Wrote ${OUT_DIR}/${page.out}`)
+}
+
+// Static, non-markdown assets (the one-click MCP installers) — copied as-is, not rendered.
+if (existsSync('installers')) {
+  cpSync('installers', `${OUT_DIR}/installers`, { recursive: true })
+  console.log(`Copied installers/ to ${OUT_DIR}/installers`)
 }

@@ -1,39 +1,71 @@
-# Connecting Claude Desktop via Claude Code
+# Connecting Claude Desktop to Everpure Intelligence
 
 For teammates whose organization has disabled Claude Desktop's built-in UI for installing
-custom MCP servers. This uses Claude Code to edit `claude_desktop_config.json` directly instead
-— same end result as the normal Settings → Developer → Edit Config flow, just a different door
-in.
+custom MCP servers. There are two ways in — same end result either way, just pick whichever
+fits you:
+
+- **Most people:** the one-click installer (Step 2 below) — no terminal, no Claude Code needed.
+- **Already use Claude Code?** skip to the [alternative method](#alternative-already-use-claude-code)
+  instead — it's the same idea, just driven through Claude Code rather than a downloaded file.
 
 ## Step 1 — Get your personal API key
 
 Make sure you have your own personal Everpure API key first — it starts with `evp_`. If you
 don't have one yet, request one from Brandon (email: bspencer@everpuredata.com, Slack:
 @Brandon) — each teammate gets their own key, not a shared one. Don't continue until you have
-it in hand — you'll need it in Step 3.
+it in hand — you'll need it in the next step.
 
-## Step 2 — Open a terminal, then confirm Claude Code is installed
+## Step 2 — Run the one-click installer
 
-**macOS:** press **Cmd + Space**, type `Terminal`, press **Enter**.
+Download the file for your computer, then double-click it:
 
-**Windows:** press the **Windows key**, type `PowerShell`, press **Enter**.
+- **Mac:** [install-mac.command](./installers/install-mac.command)
+- **Windows:** [install-windows.zip](./installers/install-windows.zip) — unzip it first,
+  then double-click `install-windows.bat` inside
 
-Keep that window open — you'll use the same one for every step below.
+What happens next:
 
-In it, run:
+1. A popup explains what's about to happen — click **OK**.
+2. If Node.js isn't installed yet, it says so and opens the download page for you. Install it,
+   then double-click the same file again.
+3. A popup asks you to paste your API key from Step 1. Paste it and click **OK**.
+4. A final popup confirms you're set up, and Claude Desktop restarts on its own to connect.
+
+If anything goes wrong, a popup will say so in plain language and ask you to send that message
+to Brandon — nothing gets left in a broken state.
+
+## Step 3 — Verify
+
+Once Desktop reopens, ask it something like *"what content do we have on ransomware
+protection?"* During weekday business hours (6am–6pm Pacific) a scheduled ping keeps the server
+warm, so it should respond right away. Outside that window, expect a ~30–60 second delay on the
+first call while it wakes up — if you see a "Server disconnected" message, that's what's
+happening; just try again a moment later.
+
+---
+
+## Alternative: already use Claude Code?
+
+This does the exact same thing as Step 2 above, just by handing Claude Code a command instead
+of downloading a file. Use this if you already have Claude Code installed and would rather work
+that way.
+
+### Confirm Claude Code is installed
+
+Open a terminal (**macOS:** Cmd + Space, type `Terminal`, Enter. **Windows:** Windows key, type
+`PowerShell`, Enter) and run:
 
 ```bash
 claude --version
 ```
 
-If that prints a version number, skip to Step 3. If it says "command not found," install it:
+If that prints a version number, you're set. If it says "command not found," install it:
 
 ```bash
 npm install -g @anthropic-ai/claude-code
 ```
 
-This needs Node.js — if `npm` isn't found either, install it right from this same terminal,
-no website needed:
+This needs Node.js — if `npm` isn't found either, install it right from this same terminal:
 
 **macOS:**
 ```bash
@@ -50,18 +82,14 @@ winget install OpenJS.NodeJS.LTS
 Then close this window, open a new Terminal/PowerShell window, and re-run
 `npm install -g @anthropic-ai/claude-code` from above. Confirm with `claude --version` again.
 
-## Step 3 — Have Claude Code run this for you
-
-Everything above (Step 2) you typed straight into your terminal. This step is different: you're
-about to hand a job to Claude Code instead of running anything yourself, and you'll do it from
-the Claude Desktop app itself — no terminal needed for this part.
+### Have Claude Code run this for you
 
 Open **Claude Desktop**, and in the model/agent picker select **Claude Code**.
 
-Now, replace `PASTE_MY_KEY_HERE` below with your personal API key from Step 1, then click the
-copy icon on the box below, paste the **whole thing** into the Claude Code chat, and send it.
-Claude Code reads it, runs the command on your behalf, and shows you the result; you don't run
-any of this yourself:
+Replace `PASTE_MY_KEY_HERE` below with your personal API key from Step 1, then click the copy
+icon on the box below, paste the **whole thing** into the Claude Code chat, and send it. Claude
+Code reads it, runs the command on your behalf, and shows you the result; you don't run any of
+this yourself:
 
 ```
 Run this exact command for me, then show me the output:
@@ -97,19 +125,13 @@ Don't launch or restart anything afterward — I'll quit and reopen Claude Deskt
 This resolves `npx`'s real path itself rather than trusting Desktop to find it later — a common,
 silent failure mode otherwise — and only ever touches the `"everpure-artifacts"` key under
 `"mcpServers"`; any other MCP servers already configured stay exactly as they are. The command's
-own printed output is the confirmation it worked.
-
-## Step 4 — Verify
-
-Fully quit (not just close the window) and reopen Claude Desktop, then ask it something like
-*"what content do we have on ransomware protection?"* During weekday business hours (6am–6pm
-Pacific) a scheduled ping keeps the server warm, so it should respond right away. Outside that
-window, expect a ~30–60 second delay on the first call while it wakes up — if you see a
-"Server disconnected" message, that's what's happening; just try again a moment later.
+own printed output is the confirmation it worked. Once it's done, follow Step 3 above to verify.
 
 ---
 
-*Notes for whoever's rolling this out, not part of what you'd send a teammate: test this whole
-flow with one person before rolling out further — if the admin policy blocks custom MCP servers
-at a deeper level than just the UI button, Desktop might ignore the config even after a correct
-edit. And keep delivering each personal key out-of-band, same as for REST API testers.*
+*Notes for whoever's rolling this out, not part of what you'd send a teammate: test both paths
+— the installer and the Claude Code method — with one person each before rolling out further. If
+the admin policy blocks custom MCP servers at a deeper level than just the UI button, Desktop
+might ignore the config even after a correct edit. The installer's interactive dialogs and the
+Windows version specifically haven't been tested end-to-end on a real machine yet — verify those
+first. And keep delivering each personal key out-of-band, same as for REST API testers.*
