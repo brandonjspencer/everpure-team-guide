@@ -3,6 +3,12 @@ set -e
 
 osascript -e 'display dialog "This sets up Claude Desktop to connect to Everpure Intelligence.\n\nOn the next screen, paste your personal API key (starts with evp_). Get one from Brandon if you do not have it yet.\n\nClick OK to continue." buttons {"Cancel", "OK"} default button "OK" with title "Everpure MCP Setup"'
 
+if ! osascript -e 'id of application "Claude"' >/dev/null 2>&1; then
+  osascript -e 'display dialog "Claude Desktop is not installed yet.\n\nClick OK and we will open the download page for you. Install Claude Desktop, then double-click this file again." buttons {"OK"} default button "OK" with title "Claude Desktop Required"'
+  open "https://claude.com/download"
+  exit 1
+fi
+
 if ! command -v node >/dev/null 2>&1; then
   osascript -e 'display dialog "This setup needs Node.js installed first.\n\nClick OK and we will open the download page for you. Install it, then double-click this file again." buttons {"OK"} default button "OK" with title "Node.js Required"'
   open "https://nodejs.org"

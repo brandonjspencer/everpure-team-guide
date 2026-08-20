@@ -6,6 +6,21 @@ Add-Type -AssemblyName System.Windows.Forms
   "Everpure MCP Setup"
 ) | Out-Null
 
+$claudeInstalled = Get-ItemProperty `
+  "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*", `
+  "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*", `
+  "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*" `
+  -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like "*Claude*" }
+
+if (-not $claudeInstalled) {
+  [System.Windows.Forms.MessageBox]::Show(
+    "Claude Desktop is not installed yet.`n`nWe will open the download page for you. Install Claude Desktop, then run this file again.",
+    "Claude Desktop Required"
+  ) | Out-Null
+  Start-Process "https://claude.com/download"
+  exit 1
+}
+
 $node = Get-Command node -ErrorAction SilentlyContinue
 if (-not $node) {
   [System.Windows.Forms.MessageBox]::Show(

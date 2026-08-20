@@ -8,6 +8,9 @@ fits you:
 - **Already use Claude Code?** skip to the [alternative method](#alternative-already-use-claude-code)
   instead — it's the same idea, just driven through Claude Code rather than a downloaded file.
 
+Either way, you'll need **Claude Desktop** itself installed first — get it at
+[claude.com/download](https://claude.com/download) if you haven't already.
+
 ## Step 1 — Get your personal API key
 
 Make sure you have your own personal Everpure API key first — it starts with `evp_`. If you
@@ -26,10 +29,12 @@ Download the file for your computer, then double-click it:
 What happens next:
 
 1. A popup explains what's about to happen — click **OK**.
-2. If Node.js isn't installed yet, it says so and opens the download page for you. Install it,
+2. If Claude Desktop isn't installed yet, it says so and opens the download page for you.
+   Install it, then double-click the same file again.
+3. If Node.js isn't installed yet, it says so and opens the download page for you. Install it,
    then double-click the same file again.
-3. A popup asks you to paste your API key from Step 1. Paste it and click **OK**.
-4. A final popup confirms you're set up, and Claude Desktop restarts on its own to connect.
+4. A popup asks you to paste your API key from Step 1. Paste it and click **OK**.
+5. A final popup confirms you're set up, and Claude Desktop restarts on its own to connect.
 
 If anything goes wrong, a popup will say so in plain language and ask you to send that message
 to Brandon — nothing gets left in a broken state.
