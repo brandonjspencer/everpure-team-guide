@@ -304,10 +304,10 @@ takes a server URL directly — no local install at all if it supports a bearer 
 Steps vary by account/version, so this is worth checking live rather than following a fixed
 click-path here.
 
-> Free-tier note: the MCP server has no dedicated health check of its own, but in practice it's
-> usually already warm during work hours — MapStack's own traffic keeps it hot as a side effect.
-> Outside work hours, or on a stretch where MapStack itself has been quiet, the first tool call
-> can still take up to a minute while it wakes back up.
+> Free-tier note: a scheduled GitHub Actions ping keeps the MCP server warm on weekdays, roughly
+> 6am–6pm Pacific (same window as the REST API), on top of the incidental warmth from MapStack's
+> own regular traffic. Outside that window, or on the rare gap the scheduled ping doesn't
+> perfectly cover, the first tool call can still take up to a minute while it wakes back up.
 
 **Any other MCP client that speaks HTTP + custom headers** can use the same shape Claude Code's
 command produces under the hood:
@@ -467,11 +467,12 @@ Recommendation results also carry a ⚠ flag on brand-stale items.
    results still come back, just less semantically sharp.
 5. **Gated content is included by default** in most reads; filter `accessTier=public` or use
    `publicOnly` in journey builds if you only want ungated assets.
-6. **Free-tier hosting may cold-start.** The REST API is kept warm on weekdays, ~6am–6pm
-   Pacific (see §1). The MCP server has no health check of its own, but is usually warm across
-   that same window too — MapStack's regular traffic keeps it hot incidentally (see §3.1).
-   Outside work hours, or whenever that ambient traffic hasn't happened recently, the first
-   request after idle can take ~30–60s. Retry once before reporting an outage.
+6. **Free-tier hosting may cold-start.** Both the REST API and the MCP server are kept warm on
+   weekdays, ~6am–6pm Pacific, by scheduled pings (see §1 and §3.1) — the MCP server's schedule
+   also loops every few minutes per run to survive GitHub Actions' own scheduling jitter, since a
+   single 10-minute cron trigger wasn't landing reliably enough to beat Render's ~15-minute
+   idle spin-down. Outside that window, the first request after idle can take ~30–60s. Retry
+   once before reporting an outage.
 7. **Everything read-only unless your key says otherwise** — 403s on PATCH/POST-to-save are
    scope, not bugs.
 8. **`gone` content is fully removed; `redirected`/`newly-gated` are not.** As of 2026-08-18,

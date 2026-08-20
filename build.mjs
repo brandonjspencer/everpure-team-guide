@@ -100,6 +100,60 @@ article pre {
   overflow-x: auto;
 }
 article pre code { background: none; padding: 0; }
+.code-wrap {
+  position: relative;
+}
+.copy-btn {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #d8d8cc;
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0.65;
+}
+.copy-btn:hover, .copy-btn:focus-visible { opacity: 1; border-color: var(--accent); color: var(--accent); }
+.copy-btn.copied { opacity: 1; border-color: var(--accent); color: var(--accent); }
+.copy-btn svg { width: 14px; height: 14px; }
+.key-inject {
+  margin: 0 0 -0.5rem;
+  padding: 0.9rem 1rem;
+  background: var(--panel);
+  border: 1px solid #d8d8cc;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+}
+.key-inject label {
+  display: block;
+  font-family: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.76rem;
+  color: var(--muted);
+  margin: 0 0 0.5rem;
+}
+.key-inject input {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.88rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid #d8d8cc;
+  border-radius: 4px;
+  background: #fff;
+  color: var(--body);
+}
+.key-inject input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.key-inject + .code-wrap > pre { border-radius: 0 0 6px 6px; }
 article blockquote {
   margin: 0 0 1rem;
   padding: 0.2rem 1rem;
@@ -142,6 +196,87 @@ footer a { color: var(--link); }
 `
 
 marked.setOptions({ gfm: true })
+
+const KEY_PLACEHOLDER = 'PASTE_MY_KEY_HERE'
+
+const CLIPBOARD_ICON =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="4" width="10" height="14" rx="1.5"></rect><path d="M5 8v11a1.5 1.5 0 0 0 1.5 1.5H14"></path></svg>'
+const CHECK_ICON =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"></path></svg>'
+
+// Runs client-side after the page loads. Adds a copy button to every code block, and — for
+// the one block containing PASTE_MY_KEY_HERE (the MCP setup command) — an input above it that
+// live-substitutes a pasted key into that block's text, so copy grabs a ready-to-run command.
+const SCRIPT = `
+(function () {
+  function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(function () { fallbackCopy(text); });
+    } else {
+      fallbackCopy(text);
+    }
+  }
+
+  // The button lives in a wrapper OUTSIDE the <pre> — not inside it — because <pre> is the
+  // horizontally-scrolling element (overflow-x: auto). A button appended inside <pre> shares
+  // its containing block, so it scrolls along with the code instead of staying put; wrapping
+  // <pre> in a plain, non-scrolling positioned parent keeps the button fixed at the corner
+  // regardless of how far the code inside is scrolled.
+  document.querySelectorAll('article pre').forEach(function (pre) {
+    var code = pre.querySelector('code');
+    var wrap = document.createElement('div');
+    wrap.className = 'code-wrap';
+    pre.parentNode.insertBefore(wrap, pre);
+    wrap.appendChild(pre);
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'copy-btn';
+    btn.setAttribute('aria-label', 'Copy code');
+    btn.innerHTML = '${CLIPBOARD_ICON}';
+    btn.addEventListener('click', function () {
+      copyText(code ? code.textContent : pre.textContent);
+      btn.innerHTML = '${CHECK_ICON}';
+      btn.classList.add('copied');
+      setTimeout(function () {
+        btn.innerHTML = '${CLIPBOARD_ICON}';
+        btn.classList.remove('copied');
+      }, 1500);
+    });
+    wrap.appendChild(btn);
+  });
+
+  // Insert the key-input box before the .code-wrap (pre's new parent from the loop above),
+  // NOT before <pre> itself — otherwise it ends up inside .code-wrap, and the copy button
+  // (anchored to .code-wrap's corner) floats up to the top of the input box instead of the
+  // top of the code block it actually belongs to.
+  document.querySelectorAll('article pre code').forEach(function (code) {
+    var original = code.textContent;
+    if (original.indexOf('${KEY_PLACEHOLDER}') === -1) return;
+    var codeWrap = code.parentElement.parentElement;
+    var keyBox = document.createElement('div');
+    keyBox.className = 'key-inject';
+    keyBox.innerHTML =
+      '<label for="mcp-key-input">Your API key (starts with <code>evp_</code>) — fills into the command below automatically, nothing is sent anywhere</label>' +
+      '<input type="text" id="mcp-key-input" placeholder="evp_..." autocomplete="off" spellcheck="false">';
+    codeWrap.parentNode.insertBefore(keyBox, codeWrap);
+    keyBox.querySelector('input').addEventListener('input', function (e) {
+      var val = e.target.value.trim();
+      code.textContent = val ? original.split('${KEY_PLACEHOLDER}').join(val) : original;
+    });
+  });
+})();
+`
 
 /** One rendered page: a source markdown file plus the styled header it gets wrapped in. */
 const PAGES = [
@@ -224,6 +359,7 @@ ${html}
     &nbsp;&middot;&nbsp; Rebuilt automatically on every update.
   </footer>
 </main>
+<script>${SCRIPT}</script>
 </body>
 </html>
 `
