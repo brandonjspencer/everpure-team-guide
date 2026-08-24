@@ -5,8 +5,9 @@ exploring what the content intelligence layer knows. (For building/running the p
 see the [main repo's README](https://github.com/brandonjspencer/everpure-artifact-intelligence#readme).)
 
 **What this system knows:** every marketing and technical artifact on everpuredata.com, plus
-blog.everpuredata.com — **3,767 available artifacts** (100% JTBD-enriched, avg. classification
-confidence **0.826**)
+blog.everpuredata.com — **4,419 available artifacts** (100% JTBD-enriched, avg. classification
+confidence **0.774**; as of 2026-08-18, this figure covers the whole corpus — permanently-dead
+`gone` artifacts are no longer counted at all, not just excluded from "available")
 
 Each artifact is deeply analyzed for:
 
@@ -66,7 +67,7 @@ comma-separated multi-values (`?type=ebook,video`); results are paginated.
 | `phase` | `problem_identification`, `solution_exploration`, `requirements_building`, `validation`, `consensus_creation`, `supplier_selection`, `purchase` | B2B buying-process phase (Gartner-style committee work) |
 | `job` | JTBD catalog slugs, e.g. `survive-a-ransomware-attack` — full 18-job list: [jtbd-catalog.md](./jtbd-catalog.md) (or the `get_jtbd_catalog` MCP tool) | The buyer progress the content serves |
 | `force` | `push`, `pull`, `anxiety`, `habit` | Demand-side force the content acts on |
-| `committeePersona` | `economic_buyer`, `infrastructure_owner`, `technical_evaluator`, `security_compliance`, `end_user`, `executive_sponsor`, `champion`, `procurement`, `ai_platform_owner` | Buying-committee role targeted |
+| `committeePersona` | `technical_leader`, `non_technical_leader`, `infrastructure_owner`, `technical_infra_operator`, `platform_engineering`, `security_owner`, `procurement_finance_sustainability`, `enterprise_ai_leader`, `data_leader` — full behavioral detail on each: [personaReference.ts](https://github.com/brandonjspencer/everpure-artifact-intelligence/blob/main/src/config/personaReference.ts) (or the `get_persona_reference` MCP tool) | Buying-committee role targeted |
 | `product` / `solution` / `industry` / `topic` | Taxonomy slugs (`GET /taxonomy` for the canonical lists), or a common synonym — see §2.6 | Subject matter |
 | `audience` | `c-suite`, `vp-director`, `manager`, `individual-contributor`, `technical-architect`, `developer`, `end-user` | Reader level |
 | `persona` | `economic-buyer`, `technical-buyer`, `user-buyer`, `champion`, `influencer` | Classic buyer persona |
@@ -82,9 +83,10 @@ comma-separated multi-values (`?type=ebook,video`); results are paginated.
 curl -s -H "x-api-key: $EVERPURE_API_KEY" \
   "$EVERPURE_API/artifacts?industry=healthcare&type=case-study&limit=10"
 
-# Anxiety-reducing proof content aimed at the security owner, serving the validation phase (460 today)
+# Anxiety-reducing proof content aimed at the Security Owner, serving the validation phase
+# (406 in the corpus today)
 curl -s -H "x-api-key: $EVERPURE_API_KEY" \
-  "$EVERPURE_API/artifacts?committeePersona=security_compliance&force=anxiety&phase=validation"
+  "$EVERPURE_API/artifacts?committeePersona=security_owner&force=anxiety&phase=validation"
 ```
 
 Related single-artifact reads:
@@ -149,6 +151,13 @@ Profile fields worth knowing:
   "have they visited before" signal for `cta` below.
 - `hasWatchedDemo` — boolean; feeds `cta` below. Only meaningful once `engagedArtifactIds` is
   non-empty.
+- `journeyContext.precedingArtifactId` — the artifact you just showed this prospect. When set,
+  each recommendation gets a **verified** click-path signal: `navigation: { linkVerified,
+  verifiedTargetUrl, suggestedCta }`. `linkVerified` is `true` only when a real `<a href>` on the
+  preceding artifact's page (captured at crawl time) resolves to the recommended artifact's
+  canonical URL — never inferred from topic/stage similarity. `suggestedCta` is always present
+  and honest either way: a click-through line when verified, or "share this resource directly"
+  when not. Omitted entirely if `precedingArtifactId` isn't supplied.
 
 **Every response carries a `cta` block** — the next action to point the prospect at, not just
 content: `{ "action": "pathfinder" | "demo" | "meeting", "rationale": "...", "chatAvailable":
@@ -161,7 +170,12 @@ recommend call.
 
 ### 2.4 Journeys — `POST /journeys/build` and friends
 
-Build an ordered content sequence across stages, one artifact per slot, with transition notes.
+Build a **realistic click path** — a journey that tours the site's actual structure (real
+solution/product/demo/service/event/trust-center hub pages and their real sub-pages), falling
+back to content-scoring only where no real hub tree exists. A requested stage can produce
+*more than one* step (e.g. four real sibling sub-pages all classified `education`), so
+`maxLength` caps the **total number of steps emitted**, not the number of distinct requested
+stages.
 
 ```bash
 # Funnel-keyed: awareness → decision
@@ -171,21 +185,80 @@ curl -s -X POST -H "x-api-key: $EVERPURE_API_KEY" -H "content-type: application/
     "targetStages": ["awareness", "education", "consideration", "decision"]
   }'
 
-# Phase-keyed: the buying committee's path (one step per buying-process phase)
+# Phase-keyed: the buying committee's path (one step per buying-process phase, absent a real hub)
 curl -s -X POST -H "x-api-key: $EVERPURE_API_KEY" -H "content-type: application/json" \
   "$EVERPURE_API/journeys/build" -d '{
     "prospectProfile": { "industry": "healthcare", "jobsToBeDone": ["survive-a-ransomware-attack"] },
     "targetPhases": ["problem_identification", "solution_exploration", "validation", "consensus_creation", "purchase"]
   }'
+
+# entryPointUrl: pin the prospect's REAL first destination as step one (e.g. "lands on the
+# home page from organic search, interested in virtualization") — the journey walks the real
+# hub tree from there if it resolves to one.
+curl -s -X POST -H "x-api-key: $EVERPURE_API_KEY" -H "content-type: application/json" \
+  "$EVERPURE_API/journeys/build" -d '{
+    "prospectProfile": { "jobTitle": "VP Infrastructure", "currentTopics": ["virtualization"] },
+    "targetStages": ["awareness", "education", "consideration", "decision", "expansion", "advocacy"],
+    "entryPointUrl": "https://www.everpuredata.com/solutions/virtualization.html",
+    "maxLength": 9
+  }'
 ```
 
 Pass **exactly one** of `targetStages` (funnel) or `targetPhases` (buying-process) — the API
-400s if you send both or neither. Options: `maxLength`, `publicOnly`,
-`artifactTypeMix` (e.g. `{ "video": 2, "case-study": 1 }`).
+400s if you send both or neither. Options: `maxLength` (2–20, default 5, total steps not
+stages), `publicOnly`, `artifactTypeMix` (e.g. `{ "video": 2, "case-study": 1 }`),
+`entryPointUrl` (the prospect's actual, named first destination — pinned as step one
+regardless of score; silently ignored if it doesn't resolve to a real, live artifact).
 
 Journeys can also be **saved** (`POST /journeys` with a `name`, needs a write-scoped key) and
 then monitored: `GET /journeys/:id/health` flags steps whose artifact has gone away, changed,
 been reclassified out of its slot, become gated, or picked up brand issues.
+
+Each step (from the second onward) carries the same **verified** click-path signal as
+`/artifacts/recommend` above (`navigation: { linkVerified, verifiedTargetUrl, suggestedCta }`),
+computed server-side between consecutive steps — no request field needed, unlike the recommend
+endpoint. Absent on the first step (nothing precedes it to check). Every step also carries a
+**`sitemapAttached`** flag — a separate, node-level honesty signal from `navigation`: `true`
+when the step is the pinned entry point, a real hub-tree child, or a content-scored pick the
+preceding step's page really links to; `false` for a pure content-scoring fallback pick (or an
+unpinned first step) with no real structural or link basis. The MCP text rendering marks a
+`false` step with "⚠ Detached from sitemap" — the same idea MapStack's own UI flags.
+
+Every step also carries multi-pick **Next Best Experience(s)** (`nextBestExperiences`), **Next
+Best Offer(s)** (`nextBestOffers`), and **Next Best Action(s)** (`nextBestActions`) — concrete
+artifacts, each with a real match `score` and the artifact's real `url`, plus a **Think/Feel/Do**
+scenario (`thinkFeelDo`) for the prospect at that stage. `nextBestExperiences`/`nextBestOffers`
+are sourced from **one pool matching the prospect's own stated interest** (computed once,
+re-ranked per step) — not "whatever the next requested stage happens to contain." A topically
+important piece of content (say, a virtualization webinar) surfaces as a recommendation on
+*any* step it's relevant to, even a step classified for a different stage — importance is
+expressed as a strong recommendation on the page the prospect is already on, not as a
+competing future step. `nextBestActions[0]` is always the real "advance to the next step" pick
+(or the terminal CTA ladder — pathfinder/demo/meeting, routing toward a real
+demand-generation touchpoint once the journey reaches decision/validation: a confirmed
+`/thank-you` page, Contact/Contact Sales, a test-drive/trial, an event registration, or a
+gated-download offer); index 1+ are the same `nextBestOffers` pool, action-framed as "Compare
+with X" / "Review Y". Each NBX pick carries `verified: true` when the page already really
+links there, or `verified: false` (a recommendation to add that link) when it doesn't — never
+blurred. Selection is grounded and progressive: a candidate the preceding step's real page
+already links to is preferred over a merely higher-scoring unlinked one, technical depth is
+rewarded for holding or deepening rather than regressing, and the terminal step's action ladder
+is capped if the journey itself never reached decision/validation content — and demoted to an
+honest "chat only" rationale if the terminal step isn't on the main site (Pathfinder/Demo/
+Meeting aren't reachable from the blog or the other first-party properties). When
+`prospectProfile.committeePersona` names more than one buying-committee role, `nextBestOffers`
+splits one offer per persona instead of one generic pick. Each step also carries its own
+`contentGaps` (that stage's slice of the response-level `gapDetails`, richer detail behind
+`gaps`), explaining any missing experience/offer content type with suggested formats.
+
+Ranking also factors the prospect's **Web Audience tier** — `prospectProfile.webAudienceTier`
+(`platform` / `traditional` / `extended`, from `Core Web Audiences.pdf`), explicit or derived
+from `committeePersona` — toward the content types that tier is documented to prefer (analyst
+reports/video/thought-leadership for Platform; demos/case studies/datasheets for Traditional).
+Call `get_web_audience_tiers` for the full reference. Extended is a real, recognized tier
+value, but its own non-funnel journey shape (partner-specific stages, etc.) isn't built yet —
+and its sub-audiences beyond Partner (investor/press/careers) have no classified content today,
+since that content is deliberately excluded from ingestion.
 
 ### 2.5 Coverage & gaps — `GET /coverage/jtbd`
 
@@ -193,12 +266,29 @@ The Content Map engine: how well the corpus covers every job, phase, force, pers
 dimension — zero-filled (a value with no coverage still appears), with an 18×7 job-by-phase
 grid and a severity-flagged gap list (`missing` = zero assets, `critical` < 2%, `low` < 5%).
 
-Today's headline findings, straight from the endpoint: purchase-phase content (**1.58%**, 82
-assets) and the `end_user` persona (**1.08%**, 56 assets) are both **critical** gaps, and
-`procurement` (3.42%, 178 assets) + the `escape-hypervisor-lock-in` job (4.19%, 218 assets) are
-thin. The two critical gaps haven't moved at all across the last content cycle — zero new
-purchase-phase or `end_user` assets shipped — while the corpus grew elsewhere, which is itself
-the finding: these gaps won't close on their own.
+**Numbers below are current as of 2026-08-18**, after the persona-taxonomy reclassification
+finished and 1,528 `gone` (dead-link) artifacts were permanently removed from the corpus —
+4,419 artifacts remain, 100% enriched, averaging 0.774 classification confidence.
+
+Today's headline findings, straight from the endpoint: the `purchase` phase (90 assets, 2.0%)
+and the `build-a-practice-on-the-platform` job (90 assets, 2.0%) are the thinnest coverage
+points, and the `habit` demand-force (158 assets, 3.6%) is newly exposed as thin now that dead
+content no longer pads the denominator. None of these are flagged **critical** (< 2%) anymore,
+but all three sit right at the **low** (< 5%) line and are worth watching, not ignoring.
+
+Committee-persona coverage, current buying-committee taxonomy (§2.1):
+
+| Persona | Assets | Share |
+|---|---|---|
+| Technical infra operator | 3,249 | 73.5% |
+| Infrastructure owner | 3,006 | 68.0% |
+| Technical leader | 2,177 | 49.3% |
+| Platform engineering | 1,980 | 44.8% |
+| Security owner | 797 | 18.0% |
+| Procurement / finance / sustainability | 670 | 15.2% |
+| Enterprise AI leader | 447 | 10.1% |
+| Data leader | 346 | 7.8% |
+| Non-technical leader | 291 | 6.6% |
 
 ### 2.6 Taxonomy & vocabularies
 
@@ -207,6 +297,8 @@ the finding: these gaps won't close on their own.
 - `GET /taxonomy/stage-crosswalk` — the canonical translation between the three stage
   vocabularies (buying-process phases ↔ JTBD timeline ↔ funnel stages), each phase with its
   dominant forces. Use it whenever an ask arrives in one dialect and your filter needs another.
+- `GET /taxonomy/persona-reference` — full behavioral detail (roles, priorities, decision
+  criteria, messaging do/don't) for each of the 9 `committeePersona` values.
 - The 18-job JTBD catalog: [jtbd-catalog.md](./jtbd-catalog.md)
 
 **Synonyms resolve automatically.** `product` / `solution` / `industry` / `topic` filters (on
@@ -261,13 +353,20 @@ creates it if it doesn't exist yet):
 }
 ```
 
+> **Admin-managed machine, UI disabled?** If your org has turned off Desktop's custom-MCP-install
+> UI, Settings → Developer → Edit Config isn't available to you. See
+> [Connecting Claude Desktop via Claude Code](https://github.com/brandonjspencer/everpure-artifact-intelligence/blob/main/docs/mcp-desktop-setup.md)
+> for the workaround — Claude Code edits the same config file directly instead.
+
 **claude.ai (browser):** check **Settings → Connectors** for a custom-connector option that
 takes a server URL directly — no local install at all if it supports a bearer token there.
 Steps vary by account/version, so this is worth checking live rather than following a fixed
 click-path here.
 
-> Free-tier note: unlike the REST API, the MCP server isn't kept warm — the first tool call
-> after any lull, any time of day, can take up to a minute while it wakes back up.
+> Free-tier note: a scheduled GitHub Actions ping keeps the MCP server warm on weekdays, roughly
+> 6am–6pm Pacific (same window as the REST API), on top of the incidental warmth from MapStack's
+> own regular traffic. Outside that window, or on the rare gap the scheduled ping doesn't
+> perfectly cover, the first tool call can still take up to a minute while it wakes back up.
 
 **Any other MCP client that speaks HTTP + custom headers** can use the same shape Claude Code's
 command produces under the hood:
@@ -298,23 +397,28 @@ command produces under the hood:
 }
 ```
 
-### 3.2 The 13 tools
+### 3.2 The 18 tools
 
 | Tool | Ask it like… |
 |---|---|
-| `find_artifacts` | "What content do we have about data tiering for a healthcare CIO?" |
+| `find_artifacts` | "What content do we have about data tiering for a healthcare CIO?" — a ranked shortlist (capped at 20), not exhaustive |
+| `list_artifacts` | "Pull together every piece of content for Infrastructure Owners in healthcare" — no ranking, no cap, real `total`/`offset` pagination so nothing is silently dropped. Use this over `find_artifacts` whenever the deliverable needs to be complete (a booth kit, a content audit, a campaign list) |
 | `get_artifact_detail` | "Tell me everything about this piece" (by URL, slug, or id) |
 | `find_similar` | "Are there other pieces like this one, but for a less technical audience?" |
 | `recommend_for_prospect` | "What should I send a VP of IT at a bank who's skeptical after a bad vendor experience?" |
 | `build_journey` | "Build a 5-touch sequence from awareness to decision for a data-engineering audience" — or pass `phases` for a buying-committee path |
+| `journey_health` | "Is this journey still safe to send? Any gone/brand-flagged steps?" |
 | `get_taxonomy` | "What industries do we have content for?" |
 | `get_jtbd_catalog` | "Which job matches a buyer struggling with GPU utilization?" |
 | `get_stage_crosswalk` | "Which buying-process phases does 'awareness content' correspond to?" |
+| `get_persona_reference` | "What does a Security Owner care about?" / "How do I pitch a Data Leader?" |
+| `get_web_audience_tiers` | "How does a Platform-tier visitor behave differently than Traditional?" |
 | `analyze_content_coverage` | "Where are our content gaps?" / "Which jobs have no purchase-phase coverage?" |
 | `generate_content_brief` | "What content should we create next?" / "Turn our coverage gaps into recommendations" |
 | `analyze_corpus_gaps` | "What topics keep coming up that we haven't formally tagged?" |
 | `analyze_sitemap_structure` | "What's new on the site that we haven't classified yet?" / "Show me everything under /resources/" |
 | `check_brand_compliance` | "Is this artifact safe to share, brand-wise?" |
+| `brand_compliance_summary` | "How much of the corpus still needs a brand-name update?" |
 
 Plus two ambient **resources** an agent can read as context: `everpure://taxonomy` and
 `everpure://library-summary`.
@@ -366,23 +470,24 @@ gated, or was reclassified.
 
 **Use:** `GET /artifacts?committeePersona=…&force=…&phase=…`
 
-The committee lens is fully filterable. Real examples:
+The committee lens is fully filterable against the real Pure Storage buying-committee taxonomy
+(§2.1; full behavioral detail via `GET /taxonomy/persona-reference` or `get_persona_reference`).
+Example query: Security Owner, risk-reduction proof, validation phase →
+`committeePersona=security_owner&force=anxiety&phase=validation`.
 
-- Security owner, risk-reduction proof, validation phase → **460 assets** to pick from
-  (`committeePersona=security_compliance&force=anxiety&phase=validation`)
-- Procurement + habit-breaking content → **26 assets** (`force=habit&committeePersona=procurement`) —
-  thin, and that thinness is itself useful intel for the content team.
+That example query currently matches **406 assets** (2026-08-18).
 
 ### 4.4 Content strategy — the quarterly gap review
 
 **Use:** `GET /coverage/jtbd` or the `analyze_content_coverage` MCP tool.
 
 One call answers "what should we create next?": which of the 18 jobs are under-covered, which
-buying phases have holes (purchase: 1.58%), which committee personas we barely speak to
-(`end_user`: 56 assets), and the per-job × per-phase grid showing exactly which combinations
-have **zero** coverage. `generate_content_brief` turns those same gaps directly into suggested
-formats and rationales — no separate analysis step needed. `analyze_corpus_gaps` complements
-both with emergent topics that keep appearing in content but aren't formally tagged yet.
+buying phases have holes (purchase: 2.0%, 90 assets), which committee personas we barely speak
+to (non-technical leader: 6.6%, data leader: 7.8% — full breakdown in §2.5), and the per-job ×
+per-phase grid showing exactly which combinations have **zero** coverage.
+`generate_content_brief` turns those same gaps directly into suggested formats and
+rationales — no separate analysis step needed. `analyze_corpus_gaps` complements both with
+emergent topics that keep appearing in content but aren't formally tagged yet.
 
 ### 4.5 Journey strategy — the Content Map
 
@@ -423,11 +528,37 @@ Recommendation results also carry a ⚠ flag on brand-stale items.
    results still come back, just less semantically sharp.
 5. **Gated content is included by default** in most reads; filter `accessTier=public` or use
    `publicOnly` in journey builds if you only want ungated assets.
-6. **Free-tier hosting may cold-start.** The REST API is kept warm on weekdays, ~6am–6pm
-   Pacific (see §1); outside that window, and on the MCP server at any time (see §3.1), the
-   first request after idle can take ~30–60s. Retry once before reporting an outage.
+6. **Free-tier hosting may cold-start.** Both the REST API and the MCP server are kept warm on
+   weekdays, ~6am–6pm Pacific, by scheduled pings (see §1 and §3.1) — the MCP server's schedule
+   also loops every few minutes per run to survive GitHub Actions' own scheduling jitter, since a
+   single 10-minute cron trigger wasn't landing reliably enough to beat Render's ~15-minute
+   idle spin-down. Outside that window, the first request after idle can take ~30–60s. Retry
+   once before reporting an outage.
 7. **Everything read-only unless your key says otherwise** — 403s on PATCH/POST-to-save are
    scope, not bugs.
+8. **`gone` content is fully removed; `redirected`/`newly-gated` are not.** As of 2026-08-18,
+   the 1,528 artifacts whose source had gone permanently dead (`sourceStatus=gone`) were
+   removed from the corpus entirely — they no longer appear anywhere, including browse and
+   coverage. `redirected`/`newly-gated` content is still handled the old way: `GET /artifacts`
+   (browse) and `GET /coverage/jtbd` show it by default — browse is the deliberate escape hatch
+   for inspecting retired-but-not-dead content, and coverage reports on everything still
+   classified. `POST /artifacts/search`, `find_similar`, `random`, and every
+   `recommend`/`build_journey` call exclude both categories — those are "what can I actually
+   point someone at" paths. Filter `sourceStatus=live` on a browse call if you want parity with
+   what search/recommend would return.
+9. **Ranking may briefly lag on 48 recently corrected artifacts.** Until 2026-08-13
+   ingestion took the first PDF link on a page as that page's own document, so an article
+   that cites an outside report could absorb that report's full text — which is what
+   search ranking and taxonomy read. The pipeline now only merges documents served from
+   our own domains, and the 48 affected rows (of ~5,200) were corrected on 2026-08-13:
+   6.7M characters of other companies' documents removed, 87% of the stored text on those
+   rows. Nothing was deleted — only the borrowed text. Their classification and embedding
+   are being rebuilt from the corrected text, so until that finishes a handful of these can
+   still rank on vocabulary that reads like somebody else's paper. Worth reporting with the
+   URL if you see it. Same cleanup: 44 artifacts that had archived a cited third party's PDF
+   now return `storedAssetPath: null` — we no longer serve another company's document as an
+   Everpure asset. The citation itself is still recorded, and no first-party asset was
+   affected.
 
 ## 6. Reporting issues
 
