@@ -65,7 +65,7 @@ comma-separated multi-values (`?type=ebook,video`); results are paginated.
 | `type` | `whitepaper`, `ebook`, `case-study`, `video`, `webinar`, `datasheet`, `blog-post`, `reference-architecture`, `product-page`, … | Content format |
 | `stage` | `awareness`, `education`, `consideration`, `decision`, `validation`, `expansion`, `advocacy` | Funnel buying stage |
 | `phase` | `problem_identification`, `solution_exploration`, `requirements_building`, `validation`, `consensus_creation`, `supplier_selection`, `purchase` | B2B buying-process phase (Gartner-style committee work) |
-| `job` | JTBD catalog slugs, e.g. `survive-a-ransomware-attack` — full 18-job list: [jtbd-catalog.md](./jtbd-catalog.md) (or the `get_jtbd_catalog` MCP tool) | The buyer progress the content serves |
+| `job` | JTBD catalog slugs, e.g. `survive-a-ransomware-attack` — full 18-job list: [jtbd-catalog.md](./jtbd-catalog.html) (or the `get_jtbd_catalog` MCP tool) | The buyer progress the content serves |
 | `force` | `push`, `pull`, `anxiety`, `habit` | Demand-side force the content acts on |
 | `committeePersona` | `technical_leader`, `non_technical_leader`, `infrastructure_owner`, `technical_infra_operator`, `platform_engineering`, `security_owner`, `procurement_finance_sustainability`, `enterprise_ai_leader`, `data_leader` — full behavioral detail on each: [personaReference.ts](https://github.com/brandonjspencer/everpure-artifact-intelligence/blob/main/src/config/personaReference.ts) (or the `get_persona_reference` MCP tool) | Buying-committee role targeted |
 | `product` / `solution` / `industry` / `topic` | Taxonomy slugs (`GET /taxonomy` for the canonical lists), or a common synonym — see §2.6 | Subject matter |
@@ -299,7 +299,7 @@ Committee-persona coverage, current buying-committee taxonomy (§2.1):
   dominant forces. Use it whenever an ask arrives in one dialect and your filter needs another.
 - `GET /taxonomy/persona-reference` — full behavioral detail (roles, priorities, decision
   criteria, messaging do/don't) for each of the 9 `committeePersona` values.
-- The 18-job JTBD catalog: [jtbd-catalog.md](./jtbd-catalog.md)
+- The 18-job JTBD catalog: [jtbd-catalog.md](./jtbd-catalog.html)
 
 **Synonyms resolve automatically.** `product` / `solution` / `industry` / `topic` filters (on
 `GET /artifacts`, `POST /artifacts/search`, `find_artifacts`) and the `industry` field on
@@ -355,8 +355,9 @@ creates it if it doesn't exist yet):
 
 > **Admin-managed machine, UI disabled?** If your org has turned off Desktop's custom-MCP-install
 > UI, Settings → Developer → Edit Config isn't available to you. See
-> [Connecting Claude Desktop via Claude Code](https://github.com/brandonjspencer/everpure-artifact-intelligence/blob/main/docs/mcp-desktop-setup.md)
-> for the workaround — Claude Code edits the same config file directly instead.
+> [Connecting Claude Desktop to Everpure Intelligence](./mcp-desktop-setup.html) for the
+> workaround — a one-click installer for most people, or Claude Code editing the config
+> directly if you prefer that route.
 
 **claude.ai (browser):** check **Settings → Connectors** for a custom-connector option that
 takes a server URL directly — no local install at all if it supports a bearer token there.
