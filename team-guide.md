@@ -336,7 +336,15 @@ claude mcp add --transport http everpure-artifacts https://everpure-artifact-mcp
 
 The CLI writes its own config. Nothing else to do — start a session and ask it something.
 
-**Claude Desktop:** Desktop's config file can't attach a bearer header directly, so bridge
+**Claude Desktop — easiest: download the extension.**
+[everpure-artifacts.mcpb](./installers/everpure-artifacts.mcpb) — drag it onto Claude Desktop
+(or double-click it), then paste your API key into Desktop's own config screen when it asks.
+No Node.js check, no Gatekeeper warning, no manual JSON editing — one file, works on
+Mac/Windows/Linux. It's a thin stdio↔HTTP bridge (no dependencies, just Node's built-in
+`http`/`https`), not a real local server; see `desktop-installer/mcpb/` in the main repo to see
+how it works or rebuild it after a tool-list change.
+
+**Or by hand:** Desktop's config file can't attach a bearer header directly, so bridge
 through [`mcp-remote`](https://www.npmjs.com/package/mcp-remote). Paste this into
 `claude_desktop_config.json` and restart the app — easiest way to find/open that file is
 **Settings → Developer → Edit Config** inside the app itself, which opens it directly (and
