@@ -22,10 +22,10 @@ it in hand — you'll need it in the next step.
 
 **Try this first:** [everpure-artifacts.mcpb](./installers/everpure-artifacts.mcpb) — drag it
 onto Claude Desktop (or double-click it), then paste your key from Step 1 into Desktop's own
-config screen. No Node.js, no popups, no restart-and-hope. This is a genuinely different Desktop
-feature (installing an *extension*) from the custom-MCP-server UI your org disabled, so it's
-worth trying even here — but it hasn't been confirmed to work on an admin-locked machine yet. If
-it doesn't show a config screen or silently does nothing, fall back to the script below.
+config screen. No Node.js, no popups, no restart-and-hope. Installing an extension this way uses
+a different Desktop feature than the custom-MCP-server UI your org disabled, so it's worth trying
+even on a locked-down machine — though that hasn't been confirmed to work yet. If it doesn't show
+a config screen or silently does nothing, fall back to the script below.
 
 **Fallback — the script installer.** Download the file for your computer, then double-click it:
 
