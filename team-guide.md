@@ -361,11 +361,10 @@ creates it if it doesn't exist yet):
 }
 ```
 
-> **Admin-managed machine, UI disabled?** If your org has turned off Desktop's custom-MCP-install
-> UI, Settings → Developer → Edit Config isn't available to you. See
-> [Connecting Claude Desktop to Everpure Intelligence](./mcp-desktop-setup.html) for the
-> workaround — a one-click installer for most people, or Claude Code editing the config
-> directly if you prefer that route.
+> **Admin-managed machine, UI disabled?** The extension install above is a different Desktop
+> feature from the custom-MCP-server UI, so it's worth trying even if your org has disabled
+> that — see [Connecting Claude Desktop to Everpure Intelligence](./mcp-desktop-setup.html) for
+> the plain get-a-key-and-double-click version.
 
 **claude.ai (browser):** check **Settings → Connectors** for a custom-connector option that
 takes a server URL directly — no local install at all if it supports a bearer token there.
