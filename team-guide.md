@@ -16,7 +16,7 @@ Each artifact is deeply analyzed for:
 - **Where it fits in a journey** — funnel stages, B2B buying-process phases, JTBD demand timeline
 - **What progress it serves** — Jobs-To-Be-Done from a locked 18-job catalog, the demand-side
   forces it acts on (push / pull / anxiety / habit), and the alternative it positions against
-- **What it's about** — products, solutions, industries, topics (188 canonical taxonomy slugs)
+- **What it's about** — products, solutions, industries, topics (220 canonical taxonomy slugs)
 - **When to use it** — surfacing signals ("send this when the prospect asks about…"), journey
   sequencing hints, brand-compliance status
 
@@ -69,6 +69,7 @@ comma-separated multi-values (`?type=ebook,video`); results are paginated.
 | `force` | `push`, `pull`, `anxiety`, `habit` | Demand-side force the content acts on |
 | `committeePersona` | `technical_leader`, `non_technical_leader`, `infrastructure_owner`, `technical_infra_operator`, `platform_engineering`, `security_owner`, `procurement_finance_sustainability`, `enterprise_ai_leader`, `data_leader` — full behavioral detail on each: [personaReference.ts](https://github.com/brandonjspencer/everpure-artifact-intelligence/blob/main/src/config/personaReference.ts) (or the `get_persona_reference` MCP tool) | Buying-committee role targeted |
 | `product` / `solution` / `industry` / `topic` | Taxonomy slugs (`GET /taxonomy` for the canonical lists), or a common synonym — see §2.6 | Subject matter |
+| `channel` | `email`, `sales-rep`, `webinar`, `event`, `website`, `paid-media`, `organic-search`, `social`, `partner`, `community`, `other` | Delivery channel this content fits — normalized from the classifier's free-text `idealChannel`/`surfacingSignals[].channel` (see [contentChannels.ts](https://github.com/brandonjspencer/everpure-artifact-intelligence/blob/main/src/config/contentChannels.ts)) |
 | `audience` | `c-suite`, `vp-director`, `manager`, `individual-contributor`, `technical-architect`, `developer`, `end-user` | Reader level |
 | `persona` | `economic-buyer`, `technical-buyer`, `user-buyer`, `champion`, `influencer` | Classic buyer persona |
 | `technicalDepth` | `executive`, `practitioner`, `technical`, `developer` | How deep it goes |
@@ -151,6 +152,12 @@ Profile fields worth knowing:
   "have they visited before" signal for `cta` below.
 - `hasWatchedDemo` — boolean; feeds `cta` below. Only meaningful once `engagedArtifactIds` is
   non-empty.
+- `targetChannel` — the delivery channel the recommended content should fit (`email`,
+  `sales-rep`, `webinar`, `event`, `website`, `paid-media`, `organic-search`, `social`,
+  `partner`, `community`, `other`). A soft ranking preference, not a filter — an artifact with
+  no channel tags at all is never excluded or penalized, just not boosted. Same field, same
+  effect, on `POST /journeys/build`'s `prospectProfile` and the MCP `recommend_for_prospect`/
+  `build_journey` tools.
 - `journeyContext.precedingArtifactId` — the artifact you just showed this prospect. When set,
   each recommendation gets a **verified** click-path signal: `navigation: { linkVerified,
   verifiedTargetUrl, suggestedCta }`. `linkVerified` is `true` only when a real `<a href>` on the
@@ -292,7 +299,13 @@ Committee-persona coverage, current buying-committee taxonomy (§2.1):
 
 ### 2.6 Taxonomy & vocabularies
 
-- `GET /taxonomy` — the 188 canonical product/solution/industry/topic/job-function slugs
+- `GET /taxonomy` — the 220 canonical product/solution/industry/topic/job-function slugs. Since 2026-09-04
+  this includes FlashArray/FlashBlade/Purity model slugs (`flasharray-x`, `flashblade-s`, `purity-fa`…) and
+  partner/platform solutions (`azure`, `nutanix`, `nvidia`, `red-hat-openshift`, `sap-hana`, `sql-server`,
+  `oracle-database`, `openstack`, `ai-factory`, `threat-detection`…). `storage-as-a-service` is now a
+  **product** slug only (it was a solution slug before 2026-09-04; the rows were migrated). Terms carry a `parentSlug` where they
+  are a model child or an umbrella (e.g. `flasharray-x` → `flasharray`, `hybrid-cloud` → `cloud`). Artifacts
+  classified before 1.3.0 don't carry the new slugs until they are reclassified.
 - `GET /taxonomy/coverage` — artifact counts per taxonomy value
 - `GET /taxonomy/stage-crosswalk` — the canonical translation between the three stage
   vocabularies (buying-process phases ↔ JTBD timeline ↔ funnel stages), each phase with its
@@ -317,6 +330,41 @@ directly.
 legacy-brand ("Pure Storage" → "Everpure") status with suggested replacements. Check before
 putting an artifact in front of a customer.
 
+### 2.8 Closed-loop feedback — `POST /v1/feedback` and friends
+
+Every `recommend`/`journey build`/`journey save` call is now passively logged
+(`recommendation_log` — endpoint, prospect profile, the artifact IDs actually returned), so
+"what did we recommend to fintech CISOs last month" is answerable without instrumenting a
+caller. This happens automatically, fire-and-forget — nothing to call for it, and a logging
+hiccup never affects the real response. **REST-only, deliberately not an MCP tool**: every MCP
+tool in this server is read-only by design (a dedicated security review confirmed it), and
+recording engagement is a write, however narrow.
+
+The other half — reporting what actually happened once a caller observes it — is a real
+endpoint:
+
+```bash
+curl -s -X POST -H "x-api-key: $EVERPURE_API_KEY" -H "content-type: application/json" \
+  "$EVERPURE_API/feedback" -d '{
+    "prospectKey": "crm-contact-48213",
+    "artifactId": "6e1e6b8e-....-....-....-............",
+    "action": "clicked",
+    "channel": "email",
+    "occurredAt": "2026-09-02T18:30:00Z"
+  }'
+```
+
+- `prospectKey` is opaque — a CRM contact ID or CDP profile ID the caller already tracks, never
+  a real identity this system resolves or stores PII against.
+- `action` is one of `served`, `clicked`, `converted`, `ignored`. Everything but `served` implies
+  the caller independently observed real engagement (an email open/click, a CRM stage change,
+  a self-report) — this system never infers it.
+- `journeyId`/`sequencePosition` are optional context if the event came from a saved journey.
+- `GET /feedback?prospectKey=...&artifactId=...&journeyId=...&action=...` lists recorded events,
+  paginated, newest first.
+- Requires the `engagement:write` scope to record, `engagement:read` to list — neither is
+  bundled into the scopes existing keys carry by default; a key needs one explicitly added.
+
 ---
 
 ## 3. The MCP server
@@ -337,12 +385,18 @@ claude mcp add --transport http everpure-artifacts https://everpure-artifact-mcp
 The CLI writes its own config. Nothing else to do — start a session and ask it something.
 
 **Claude Desktop — easiest: download the extension.**
-[everpure-artifacts.mcpb](./installers/everpure-artifacts.mcpb) — drag it onto Claude Desktop
-(or double-click it), then paste your API key into Desktop's own config screen when it asks.
-No Node.js check, no Gatekeeper warning, no manual JSON editing — one file, works on
-Mac/Windows/Linux. It's a thin stdio↔HTTP bridge (no dependencies, just Node's built-in
-`http`/`https`), not a real local server; see `desktop-installer/mcpb/` in the main repo to see
-how it works or rebuild it after a tool-list change.
+[everpure-artifacts.mcpb](./installers/everpure-artifacts.mcpb) —
+drag it onto Claude Desktop (or double-click it), then paste your API key into Desktop's own
+config screen when it asks. No Node.js check, no Gatekeeper warning, no manual JSON editing —
+one file, works on Mac/Windows/Linux. It's a thin stdio↔HTTP bridge (no dependencies, just
+Node's built-in `http`/`https`), not a real local server; see `desktop-installer/mcpb/` in the main
+repo to see how it works or rebuild it after a tool-list change:
+
+```bash
+cd desktop-installer/mcpb
+npx @anthropic-ai/mcpb validate manifest.json
+npx @anthropic-ai/mcpb pack . ../everpure-artifacts.mcpb
+```
 
 **Or by hand:** Desktop's config file can't attach a bearer header directly, so bridge
 through [`mcp-remote`](https://www.npmjs.com/package/mcp-remote). Paste this into
@@ -567,6 +621,10 @@ Recommendation results also carry a ⚠ flag on brand-stale items.
    now return `storedAssetPath: null` — we no longer serve another company's document as an
    Everpure asset. The citation itself is still recorded, and no first-party asset was
    affected.
+10. **`engagement:read`/`engagement:write` aren't on any existing key by default.** They're new
+    scopes for `GET`/`POST /v1/feedback` (§2.8) — a 403 there means the key genuinely needs one
+    added, not a bug. The passive logging half (every recommend/journey call recorded to
+    `recommendation_log`) needs no scope at all — it isn't a caller-facing endpoint.
 
 ## 6. Reporting issues
 
