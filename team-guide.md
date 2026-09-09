@@ -304,8 +304,11 @@ Committee-persona coverage, current buying-committee taxonomy (§2.1):
   partner/platform solutions (`azure`, `nutanix`, `nvidia`, `red-hat-openshift`, `sap-hana`, `sql-server`,
   `oracle-database`, `openstack`, `ai-factory`, `threat-detection`…). `storage-as-a-service` is now a
   **product** slug only (it was a solution slug before 2026-09-04; the rows were migrated). Terms carry a `parentSlug` where they
-  are a model child or an umbrella (e.g. `flasharray-x` → `flasharray`, `hybrid-cloud` → `cloud`). Artifacts
-  classified before 1.3.0 don't carry the new slugs until they are reclassified.
+  are a model child or an umbrella (e.g. `flasharray-x` → `flasharray`, `hybrid-cloud` → `cloud`). The
+  corpus-wide reclassify to pick up these slugs finished 2026-09-08 — 4,371 of 4,403 live artifacts
+  (99.3%) now carry them. The remaining 32 are pages that became gated mid-drain (`newly-gated`),
+  which the reclassify batch deliberately skips; they'll pick up the new taxonomy on their next
+  refresh once gating is confirmed.
 - `GET /taxonomy/coverage` — artifact counts per taxonomy value
 - `GET /taxonomy/stage-crosswalk` — the canonical translation between the three stage
   vocabularies (buying-process phases ↔ JTBD timeline ↔ funnel stages), each phase with its
