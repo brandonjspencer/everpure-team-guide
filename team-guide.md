@@ -41,6 +41,11 @@ Postman) and an **MCP server** (for AI agents — Claude Desktop, Claude Code, c
 > down after ~15 minutes idle, and the first request after that takes 30–60 seconds to respond
 > — that's normal, not an outage. Retry once before reporting a problem.
 
+> **Anonymous agent discovery (not enabled yet).** A separate, keyless, read-only surface for
+> outside AI agents — an agent card plus five `/v1/public/*` routes — is built but switched off
+> in production. Everything else in this guide still needs a key. See §2.10; until it is turned
+> on, those paths answer `401` like any other unknown path.
+
 **60-second smoke test:**
 
 ```bash
@@ -124,7 +129,7 @@ Two things testers should know:
 ### 2.3 Recommend — `POST /artifacts/recommend`
 
 Describe a **prospect**, get ranked content with a rationale per pick. This is the engine the
-Journey Map Builder uses; it scores candidates across semantic similarity, taxonomy overlap,
+Journey Map Builder uses; it scores candidates across semantic similarity, taxonomy overlap, measured engagement (a 5 % tie-breaker from Contentsquare: how long visitors stay and scroll on that kind of page, neutral for untracked PDFs),
 stage fit, audience fit, and sequence position.
 
 ```bash
@@ -370,6 +375,208 @@ curl -s -X POST -H "x-api-key: $EVERPURE_API_KEY" -H "content-type: application/
 
 ---
 
+### 2.9 Performance context — Contentsquare traffic on every artifact
+
+Since 2026-10-08 the corpus carries **page-level performance from Contentsquare** alongside
+classification, so "what do we have?" can be answered next to "how does it perform?".
+
+How it works, and the one caveat to keep in mind:
+
+- Contentsquare reports metrics per **page group** (sets of URLs defined in the Contentsquare
+  UI), not per URL. Every artifact is linked to the most specific page group whose URL rule
+  matches its canonical URL — a themed group (e.g. "Knowledge - AI", "PDFs - Solution briefs",
+  "Demos - Managing at scale") when one exists, else the broader group from the main mapping.
+  The `performance` block on an artifact shows the **group's
+  totals** (shared by every page in the group); the `views28d` on cards, sorts and coverage
+  is an **estimated share** — the group's views split evenly across the artifacts in it — so
+  a group's traffic is counted once across the corpus instead of once per member. Exit,
+  bounce and scroll rates are group-level by nature.
+- PDFs are measured through the on-site document viewer, grouped by type (solution briefs,
+  case studies, …) with the most-viewed PDFs in groups of their own. Time on page is not
+  available for PDFs. **Pages no group covers (most blog posts, gated assets) show `null`** —
+  `null` means "not measured", never "zero traffic".
+- Numbers refresh nightly (trailing 7-day and 28-day windows, rates are percentages).
+
+Where it shows up:
+
+| Surface | What you get |
+|---|---|
+| `GET /artifacts` / `POST /artifacts/search` summary cards | `views28d` (estimated share), `exitRate28d` (group rate) |
+| `GET /artifacts?sort=views28d` (or `exitRate28d`) | most-visited / highest-exit first; untracked artifacts sort last |
+| `GET /artifacts?tracked=true&minViews28d=500` | only artifacts with traffic numbers / above a floor |
+| `GET /artifacts/:id` | a `performance` block: page group name, 7-day and 28-day views, visits, unique visitors, bounce, exit, scroll, time on page, goal conversion, as-of timestamps |
+| `GET /coverage/jtbd` | `traffic` summary plus `views28d` / `viewsShare` on every job, phase, force, persona and dimension cell (sums of the per-artifact estimated shares); gaps of equal severity rank by traffic |
+| `GET /coverage/jtbd/brief` | an `evidence` line per gap: how much demand the thin content already draws |
+| `GET /journeys/:id/health` | a new `underperforming` step issue when a step's page gets ≥100 views in 28 days and ≥70 % of visitors exit the site there |
+
+MCP equivalents: `find_artifacts` and `list_artifacts` accept `tracked` and `minViews28d`
+filters, `list_artifacts` accepts `sort: "views28d" | "exitRate28d"`, result blocks show a
+`Traffic (28d, page group)` line, and `get_artifact_detail` prints the full performance block.
+
+Reading the coverage numbers: a **thin cell with a large `viewsShare`** is under-served
+demand — few assets carrying a lot of traffic — and is the gap to fill first. A thin cell
+with ~0 views is thin *and* unseen; check discoverability before producing more.
+
+### 2.10 Anonymous agent discovery — `/.well-known/agent-card.json` and `/v1/public/*`
+
+> **Status: built, not enabled in production.** It ships behind `PUBLIC_DISCOVERY_ENABLED`
+> (default `false`). While that is off none of the paths below exist: they return the same `401`
+> as any other unauthenticated unknown path. Testers integrating the product use the keyed API
+> in §2.1–2.9; this section is for understanding — and later verifying — what an *outside* agent
+> (an AI assistant or crawler landing on everpuredata.com) is able to see.
+
+**What it is.** A small, anonymous, read-only door onto the same corpus, modelled on the A2A
+"agent card" convention: an agent fetches `/.well-known/agent-card.json`, reads which skills exist
+and how to call them, and then calls plain REST endpoints. No key, no login, **no LLM anywhere in
+the path** — every response is a database or reference-document lookup, so it adds no model cost.
+
+| Skill (agent-card id) | Call | Notes |
+|---|---|---|
+| Agent card | `GET /.well-known/agent-card.json` (also `GET /v1/public/.well-known/agent-card.json`) | Lists the five skills with a JSON Schema of each request (`x-everpure-input`), the limits, and how to read `confidence`. `authentication.schemes` is `["none"]`. |
+| `get_taxonomy` | `GET /v1/public/taxonomy` | Slugs and labels for products, solutions, industries, topics, job functions — use them as search filters. |
+| `get_jtbd_catalog` | `GET /v1/public/jtbd-catalog` | The 18 jobs as `id`, `slug`, `label`, `statement` only. |
+| `get_stage_crosswalk` | `GET /v1/public/stage-crosswalk` | Buying-process phase ↔ JTBD stage ↔ funnel stage mapping. |
+| `find_artifacts` | `POST /v1/public/artifacts/search` | Semantic + filtered search. See below. |
+| `find_similar` | `GET /v1/public/artifacts/:id/similar?limit=` | Public content closest to a given artifact id. May return fewer than `limit` when many of the nearest neighbours are gated. |
+
+The reference documents are deliberately **trimmed views**: no changelog notes, no internal
+file paths, no buyer-psychology fields (forces, personas, emotional/social dimensions), and
+taxonomy descriptions have the classifier-instruction sentences removed. They are cacheable for 5
+minutes (`Cache-Control: public, max-age=300`).
+
+**Search request** — `query` (1–500 characters) and/or `filter`; an empty body is a `400`.
+
+```bash
+curl -s -X POST "$BASE/v1/public/artifacts/search" \
+  -H 'content-type: application/json' \
+  -d '{ "query": "ransomware recovery for a hospital", "limit": 5,
+        "filter": { "industry": ["healthcare"] } }'
+```
+
+| Field | Rules |
+|---|---|
+| `limit` | 1–10, default 5. Anything higher is a `400`, not clamped. You can get fewer than `limit` back: results under the relevance floor are withheld, and so are the excluded pages described below. |
+| `minScore` | 0–1. Can **raise** the relevance floor for this request, never lower it. |
+| `filter` | `product`, `solution`, `industry`, `topic`, `job` are slug lists (≤10 each); taxonomy synonyms resolve as in §2.6 (`fintech` → `financial-services`) and an unknown slug quietly matches nothing. `type`, `stage` and `phase` are fixed vocabularies: an unknown value is a `400`; `type` takes ≤5 values, and `stage`/`phase` have 7 values each. Every list you send must be non-empty (`[]` is a `400`, not "no filter" — leave the key out instead), and no value or `query` may contain a NUL character. |
+| anything else | Ignored — including any `accessTier` the caller sends. |
+
+**What comes back** — each result carries only: `id`, `url`, `title`, `description`,
+`artifactType`, `publishedAt`, `ageBucket`, `buyingStages`, `targetAudience`, `technicalDepth`,
+`products`, `solutions`, `industries`, `topics`, `jobsToBeDone`. It does **not** carry traffic
+numbers, sales-trigger copy, brand status, buyer personas, channels, cloaked tags, page text or
+embeddings. Only **public-tier** content is ever returned; that is forced on the server.
+
+```json
+{
+  "data": [{ "artifact": { "id": "…", "url": "https://www.everpuredata.com/…", "title": "…" }, "score": 0.655 }],
+  "meta": { "mode": "semantic", "count": 5, "topScore": 0.655, "minScore": 0.4,
+            "confidence": "high", "lowConfidence": false, "degraded": false }
+}
+```
+
+Some pages are public and live but answer no question an agent asks — thank-you and "Registration
+Confirmed" pages, `/forms/…`, the meeting-scheduler page, the 404 page, a stray test page, a
+partner practical-exam outline, and pages an editor has titled "RETIRED –" or "DO NOT USE –" but
+left published. Search and `/similar` leave them out, **and only the pages on an explicit reviewed
+list are left out**: [`src/config/publicExclusions.json`](https://github.com/brandonjspencer/everpure-artifact-intelligence/blob/main/src/config/publicExclusions.json)
+(16 of roughly 3,900 public pages today), each entry a URL and a reason. Matching ignores scheme,
+host case, a trailing slash and any query string or fragment. Nothing is hidden by pattern, so a
+real article can never vanish because its title or URL happens to look like a form step. Real
+content filed as `artifactType=other` is not on the list: the Evergreen program description,
+impact/ESG/SOC reports, training course descriptions, reseller profiles and the "Test Drive" demo
+pages all come back.
+
+**Keeping the list current.** `npm run ops:public-exclusions` (read-only) lists entries that are no
+longer public and retrievable, which can be pruned, and public pages that *look* transactional but
+aren't on the list, as candidates. Add a candidate by PR, with a reason, only if it answers no
+question an agent would ask. If the file is malformed the API still starts, but the discovery
+surface stays off — exactly as if the flag were unset — and an error naming the file is logged at
+boot; the keyed API is unaffected. `npm test` also loads the real file, so the pre-merge gate catches a bad edit — when it is run: there is
+no CI, so an edit made in the GitHub web UI skips it. Run `npm test` locally before merging a list change.
+
+**Reading `meta` — how far to trust the answer.** This is the part an agent must not skip.
+
+| `meta` | Meaning |
+|---|---|
+| `mode` | `semantic` (vector ranked) · `text` (unranked substring match — never a confident answer) · `filter` (no query) |
+| `confidence` | `high` — semantic with a top score ≥ **0.62** (a strong sign the closest result is on-topic, not a guarantee it answers the question) · `weak` — results returned, but the top score is lower or the results aren't vector ranked · `none` — nothing cleared the floor · `null` — filter-only search |
+| `lowConfidence` | `true` exactly when `confidence` is `weak` or `none`: treat the results as a hint, not an answer |
+| floor | Semantic matches scoring under **0.4** are withheld entirely, so a clearly off-topic query returns `data: []` with `confidence: "none"` instead of confident-looking junk |
+| `degraded` | `true` when the embedding backend was unreachable, or rejected the query text (e.g. malformed Unicode), and text matching was used instead |
+| `score` | Present only on vector-ranked results. Filter-only and text results have none, and filter-only results are in recency order, not relevance order |
+
+In practice: one-word queries ("backup", "FlashBlade", "AI", "pricing") score about 0.45–0.53 and
+are graded `weak`; two-word topics ranged from 0.55 to 0.74 in testing and can land on either side
+of the boundary ("data protection" scored 0.59 and is graded `weak`, correctly — its top hits were
+generic, while "disaster recovery" scored 0.60 and was `weak` despite excellent results); specific
+multi-word questions score about 0.65 or more and are usually `high`. The boundary is a hint, not a
+verdict: a `high` result can still be a poor match ("ransomware protection" was `high` at 0.69 but
+led with an April Fools post), and a `weak` one can be excellent. Treat `weak` as "worth a second
+look", and read `topScore` and the titles rather than the label alone when the decision matters.
+
+Two things the floor does that surprise people. A natural buying question ("how do I buy",
+`topScore` ≈ 0.26) usually falls *under* the floor and returns `none` — rephrase it around the
+topic ("pricing Evergreen//One"). Off-topic or purely conversational words ("hello", "thank you")
+usually fall under the floor too and return `none`. A single broad product word ("storage",
+"pricing") scores just above it and returns loosely related pages, always graded `weak` — never
+act on a `weak` result as if it were an answer.
+
+**Limits** — all per minute, per client address (IPv6 clients count as their whole `/64`).
+
+| Bucket | Per client | All anonymous callers combined |
+|---|---|---|
+| Reference documents | 60 | 600 |
+| Search + similar (these cost an embedding call) | 30 | 200 |
+| Agent card (its own counters, so it stays reachable) | 60 | 600 |
+
+Over a limit you get `429` with `error.code: "rate_limited"` and `retry-after`. On a success, and
+on a per-client `429` ("Rate limit exceeded"), the `x-ratelimit-*` headers describe *your own*
+allowance. A message ending "Public API is at capacity" means the combined ceiling was hit, not
+your own limit: the headers then describe that shared ceiling (`remaining: 0`). Either way,
+`retry-after` is the number of seconds to back off. These limits are independent of the keyed
+API's, so exhausting them never affects a keyed caller.
+
+**What it will never do.** No LLM calls, no writes, no gated content, no `recommend` / journeys /
+coverage / brand tools (those stay behind a key), and no performance data. `/similar` returns
+public neighbours only and has no confidence signal — it is a similarity score, nothing more.
+
+**Trying it locally** (run from the repo; needs the same `.env` as the normal API):
+
+```bash
+PUBLIC_DISCOVERY_ENABLED=true API_HOST=127.0.0.1 API_PORT=3199 npm run dev:api
+curl -s localhost:3199/.well-known/agent-card.json
+```
+
+**Turning it on (Brandon / ops).** Environment variables on the API service:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PUBLIC_DISCOVERY_ENABLED` | `false` | The master switch. Off = the surface doesn't exist. |
+| `PUBLIC_CLIENT_IP_HEADER` | *(empty)* | **Set to `cf-connecting-ip` on Render.** Behind Render every socket address is the proxy, so without this all anonymous callers share one rate-limit bucket (the server logs a warning at boot in production if it's unset). Leave empty locally — trusting a header a caller can set would let them pick their own bucket. Verify it from two networks after the first deploy. |
+| `PUBLIC_RATE_LIMIT_MAX` / `PUBLIC_SEARCH_RATE_LIMIT_MAX` | `60` / `30` | Per-client, per window |
+| `PUBLIC_TOTAL_RATE_LIMIT_MAX` / `PUBLIC_TOTAL_SEARCH_RATE_LIMIT_MAX` | `600` / `200` | All callers combined |
+| `PUBLIC_RATE_LIMIT_WINDOW_MS` | `60000` | Window length |
+| `PUBLIC_MIN_SCORE` / `PUBLIC_WEAK_SCORE` | `0.4` / `0.62` | Relevance floor / the `high`↔`weak` boundary |
+| `PUBLIC_BASE_URL` | the Render API URL | Origin advertised inside the agent card |
+
+**After turning it on, confirm it is actually serving** — a malformed exclusion list keeps the surface
+off without failing the deploy:
+
+```bash
+curl -s https://everpure-artifact-api.onrender.com/v1/health          # checks.publicDiscovery must be "on"
+curl -s -o /dev/null -w '%{http_code}\n' https://everpure-artifact-api.onrender.com/.well-known/agent-card.json   # must be 200
+```
+
+`checks.publicDiscovery` is `on`, `off` (flag unset) or `invalid-exclusions` (flag set, list failed to
+load — the boot log names the problem). It is informational and never turns health red. `/v1/metrics`
+carries the same as `everpure_public_discovery_enabled` and `everpure_public_discovery_exclusions_invalid`
+gauges, for an alert.
+
+The agent card is served from the API's own `onrender.com` origin. For agents landing on
+everpuredata.com to find it, the website needs a redirect/proxy for
+`/.well-known/agent-card.json` or a link to it — that is a website-side change, not something
+the main repo can do.
+
 ## 3. The MCP server
 
 The same engine, exposed as tools an AI agent can call. Ask questions in plain English; the
@@ -484,6 +691,13 @@ command produces under the hood:
 | `analyze_sitemap_structure` | "What's new on the site that we haven't classified yet?" / "Show me everything under /resources/" |
 | `check_brand_compliance` | "Is this artifact safe to share, brand-wise?" |
 | `brand_compliance_summary` | "How much of the corpus still needs a brand-name update?" |
+
+**Scopes decide which tools you see.** On the remote server each tool needs the same scope as
+its REST equivalent (`artifacts:read`, `journeys:read`, `taxonomy:read`, `corpus:read`,
+`pipeline:read`, `brand-audit:read`) and a tool your key can't use simply isn't listed. Fixed
+2026-10-22: `get_web_audience_tiers` had no scope entry, so any key could call it; it now needs
+`taxonomy:read` like the other reference tools. If it vanished from your tool list, your key lacks
+that scope.
 
 Plus two ambient **resources** an agent can read as context: `everpure://taxonomy` and
 `everpure://library-summary`.
@@ -628,6 +842,16 @@ Recommendation results also carry a ⚠ flag on brand-stale items.
     scopes for `GET`/`POST /v1/feedback` (§2.8) — a 403 there means the key genuinely needs one
     added, not a bug. The passive logging half (every recommend/journey call recorded to
     `recommendation_log`) needs no scope at all — it isn't a caller-facing endpoint.
+
+11. **A `401` on `/v1/public/…` or `/.well-known/agent-card.json` is expected today.** The
+    anonymous discovery surface (§2.10) is switched off in production, so those paths behave like
+    any unknown unauthenticated path. It is not a key problem. Locally, set
+    `PUBLIC_DISCOVERY_ENABLED=true`.
+
+12. **An empty filter list means something different on each surface.** On the keyed
+    `POST /v1/artifacts/search`, `"product": []` matches nothing (0 results, like `type: []` always
+    did). MCP `find_artifacts` ignores an empty list, as if the key were absent. The anonymous
+    `/v1/public` search rejects it with a `400`. To filter on nothing, leave the key out.
 
 ## 6. Reporting issues
 
