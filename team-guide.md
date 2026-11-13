@@ -5,15 +5,16 @@ exploring what the content intelligence layer knows. (For building/running the p
 see the [main repo's README](https://github.com/brandonjspencer/everpure-artifact-intelligence#readme).)
 
 **What this system knows:** every marketing and technical artifact on everpuredata.com, plus
-blog.everpuredata.com — **4,419 available artifacts** (100% JTBD-enriched, avg. classification
-confidence **0.774**; as of 2026-08-18, this figure covers the whole corpus — permanently-dead
-`gone` artifacts are no longer counted at all, not just excluded from "available")
+blog.everpuredata.com — **4,533 available artifacts** (99.9% JTBD-enriched, avg. classification
+confidence **0.776**; as of 2026-11-13 — permanently-dead `gone` artifacts are not counted at all,
+not just excluded from "available")
 
 Each artifact is deeply analyzed for:
 
 - **What it is** — type, title, description, freshness, gated vs. public
 - **Who it's for** — audience level, buyer personas, technical depth, buying-committee roles
-- **Where it fits in a journey** — funnel stages, B2B buying-process phases, JTBD demand timeline
+- **Where it fits in a journey** — funnel stages, B2B buying-process phases (including the one
+  primary phase each piece mostly serves), JTBD demand timeline
 - **What progress it serves** — Jobs-To-Be-Done from a locked 18-job catalog, the demand-side
   forces it acts on (push / pull / anxiety / habit), and the alternative it positions against
 - **What it's about** — products, solutions, industries, topics (220 canonical taxonomy slugs)
@@ -70,6 +71,7 @@ comma-separated multi-values (`?type=ebook,video`); results are paginated.
 | `type` | `whitepaper`, `ebook`, `case-study`, `video`, `webinar`, `datasheet`, `blog-post`, `reference-architecture`, `product-page`, … | Content format |
 | `stage` | `awareness`, `education`, `consideration`, `decision`, `validation`, `expansion`, `advocacy` | Funnel buying stage |
 | `phase` | `problem_identification`, `solution_exploration`, `requirements_building`, `validation`, `consensus_creation`, `supplier_selection`, `purchase` | B2B buying-process phase (Gartner-style committee work) |
+| `primaryPhase` | same 7 values as `phase` | Only content whose **primary** buying-process phase is one of these — the phase most of the content serves. `phase` matches any phase the content supports; `primaryPhase` is the strict version. Content with no primary never matches. See "Primary buying phase" below. |
 | `job` | JTBD catalog slugs, e.g. `survive-a-ransomware-attack` — full 18-job list: [jtbd-catalog.md](./jtbd-catalog.html) (or the `get_jtbd_catalog` MCP tool) | The buyer progress the content serves |
 | `force` | `push`, `pull`, `anxiety`, `habit` | Demand-side force the content acts on |
 | `committeePersona` | `technical_leader`, `non_technical_leader`, `infrastructure_owner`, `technical_infra_operator`, `platform_engineering`, `security_owner`, `procurement_finance_sustainability`, `enterprise_ai_leader`, `data_leader` — full behavioral detail on each: [personaReference.ts](https://github.com/brandonjspencer/everpure-artifact-intelligence/blob/main/src/config/personaReference.ts) (or the `get_persona_reference` MCP tool) | Buying-committee role targeted |
@@ -90,10 +92,41 @@ curl -s -H "x-api-key: $EVERPURE_API_KEY" \
   "$EVERPURE_API/artifacts?industry=healthcare&type=case-study&limit=10"
 
 # Anxiety-reducing proof content aimed at the Security Owner, serving the validation phase
-# (406 in the corpus today)
+# (217 in the corpus today)
 curl -s -H "x-api-key: $EVERPURE_API_KEY" \
   "$EVERPURE_API/artifacts?committeePersona=security_owner&force=anxiety&phase=validation"
+
+# Case studies whose main job is validation (410 of the 531 case studies today)
+curl -s -H "x-api-key: $EVERPURE_API_KEY" \
+  "$EVERPURE_API/artifacts?type=case-study&primaryPhase=validation&limit=10"
 ```
+
+**Primary buying phase.** Every artifact is ranked by how much of its content serves each of the
+seven buying-process phases, as a share out of 100. Two reads are combined: one of the whole
+document, and one that labels each section and weights it by length.
+
+- **`primaryPhase`** is set only when the leading phase beats the runner-up by **at least 20
+  points**. Below that the call isn't reliable: in repeat tests the leader changed about half the
+  time on close calls.
+- **`supportedPhases`** lists every phase with a share of 25 or more, largest first, and is what
+  `journeyPhases` and the `phase` filter now use.
+- **Pages vs resources.** Product pages, resource hubs, events and "other" pages do several jobs,
+  so having no primary is normal for them ("multi-duty"). Every other type is a resource: PDFs,
+  case studies, blog posts, videos, webinars and so on. A resource is expected to lean one way,
+  and one with no primary is flagged `primary_phase_missing: true` in its `jtbd` record. That is a
+  content signal, not an error: the piece is trying to do several jobs at once.
+- The full record carries the evidence: `jtbd.phase_shares` (every phase's share),
+  `jtbd.primary_phase_evidence` (a short quote), and `jtbd.phase_ranking_version`.
+
+Where the corpus stands (2026-11-13): **2,749 artifacts have a primary**. Solution exploration
+896, validation 747, requirements building 641, problem identification 213, supplier selection
+143, consensus creation 57, purchase 52. **1,501 resources (41%) are flagged** with no clear
+primary, and 279 pages are multi-duty. Case studies lean hardest (79% have a primary); ebooks,
+infographics, analyst reports and webinars are under half. New content is ranked as it is
+classified each day.
+
+`GET /artifacts` and `GET /artifacts/:id` return `primaryPhase` (or `null`) and
+`supportedPhases` on every artifact. Search results and `/summary` cards don't carry them yet.
 
 Related single-artifact reads:
 
@@ -119,8 +152,8 @@ curl -s -X POST -H "x-api-key: $EVERPURE_API_KEY" -H "content-type: application/
 Two things testers should know:
 
 - The body key is **`filter` (singular)** and its sub-keys are singular too (`product`,
-  `industry`, `job`, `phase`, …). Unknown keys are silently ignored — if your filter seems to
-  do nothing, check the spelling first.
+  `industry`, `job`, `phase`, `primaryPhase`, …). Unknown keys are silently ignored — if your
+  filter seems to do nothing, check the spelling first.
 - When you pass a `query`, it is used **both** as a semantic vector **and** as a literal
   title/description text match, combined with AND. Short, keyword-y queries
   (`"ransomware"`, `"kubernetes storage"`) work much better than long sentences. For
@@ -278,29 +311,38 @@ The Content Map engine: how well the corpus covers every job, phase, force, pers
 dimension — zero-filled (a value with no coverage still appears), with an 18×7 job-by-phase
 grid and a severity-flagged gap list (`missing` = zero assets, `critical` < 2%, `low` < 5%).
 
-**Numbers below are current as of 2026-08-18**, after the persona-taxonomy reclassification
-finished and 1,528 `gone` (dead-link) artifacts were permanently removed from the corpus —
-4,419 artifacts remain, 100% enriched, averaging 0.774 classification confidence.
+**Numbers below are current as of 2026-11-13**, after the primary-phase backfill. Coverage counts
+every classified artifact, including redirected and newly-gated ones, so the base here is 4,699
+(100% enriched), not the 4,533 retrievable figure at the top of this guide.
 
-Today's headline findings, straight from the endpoint: the `purchase` phase (90 assets, 2.0%)
-and the `build-a-practice-on-the-platform` job (90 assets, 2.0%) are the thinnest coverage
-points, and the `habit` demand-force (158 assets, 3.6%) is newly exposed as thin now that dead
-content no longer pads the denominator. None of these are flagged **critical** (< 2%) anymore,
-but all three sit right at the **low** (< 5%) line and are worth watching, not ignoring.
+Phase counts dropped across the board on 2026-11-13. Each artifact now counts only toward phases
+with a 25%+ content share (see "Primary buying phase", §2.1), not every phase it touched.
+
+Today's flagged gaps, straight from the endpoint, all **low** (< 5%) and none critical:
+
+- the `purchase` phase (118 assets, 2.5%)
+- the `consensus_creation` phase (226 assets, 4.8%), newly flagged under the stricter phase count
+- the `build-a-practice-on-the-platform` job (103 assets, 2.2%)
+
+The `habit` demand-force (330 assets, 7.0%) is still the thinnest force but no longer near the line.
+
+Phase coverage: solution exploration 2,186 (46.5%), requirements building 2,057 (43.8%),
+validation 1,559 (33.2%), problem identification 1,175 (25.0%), supplier selection 393 (8.4%),
+consensus creation 226 (4.8%), purchase 118 (2.5%).
 
 Committee-persona coverage, current buying-committee taxonomy (§2.1):
 
 | Persona | Assets | Share |
 |---|---|---|
-| Technical infra operator | 3,249 | 73.5% |
-| Infrastructure owner | 3,006 | 68.0% |
-| Technical leader | 2,177 | 49.3% |
-| Platform engineering | 1,980 | 44.8% |
-| Security owner | 797 | 18.0% |
-| Procurement / finance / sustainability | 670 | 15.2% |
-| Enterprise AI leader | 447 | 10.1% |
-| Data leader | 346 | 7.8% |
-| Non-technical leader | 291 | 6.6% |
+| Technical infra operator | 3,402 | 72.4% |
+| Infrastructure owner | 3,104 | 66.1% |
+| Technical leader | 2,171 | 46.2% |
+| Platform engineering | 2,008 | 42.8% |
+| Security owner | 842 | 17.9% |
+| Procurement / finance / sustainability | 776 | 16.5% |
+| Enterprise AI leader | 513 | 10.9% |
+| Data leader | 439 | 9.3% |
+| Non-technical leader | 286 | 6.1% |
 
 ### 2.6 Taxonomy & vocabularies
 
@@ -673,9 +715,9 @@ command produces under the hood:
 
 | Tool | Ask it like… |
 |---|---|
-| `find_artifacts` | "What content do we have about data tiering for a healthcare CIO?" — a ranked shortlist (capped at 20), not exhaustive |
-| `list_artifacts` | "Pull together every piece of content for Infrastructure Owners in healthcare" — no ranking, no cap, real `total`/`offset` pagination so nothing is silently dropped. Use this over `find_artifacts` whenever the deliverable needs to be complete (a booth kit, a content audit, a campaign list) |
-| `get_artifact_detail` | "Tell me everything about this piece" (by URL, slug, or id) |
+| `find_artifacts` | "What content do we have about data tiering for a healthcare CIO?" — a ranked shortlist (capped at 20), not exhaustive. Takes `primaryPhase` as well as `phase` ("case studies whose main job is validation") |
+| `list_artifacts` | "Pull together every piece of content for Infrastructure Owners in healthcare" — no ranking, no cap, real `total`/`offset` pagination so nothing is silently dropped. Use this over `find_artifacts` whenever the deliverable needs to be complete (a booth kit, a content audit, a campaign list). Also takes `primaryPhase` |
+| `get_artifact_detail` | "Tell me everything about this piece" (by URL, slug, or id). Includes a line such as `Buying-process phase: primary validation · also supports consensus_creation`, or the phases plus why there's no primary (multi-duty page, or a flagged resource) |
 | `find_similar` | "Are there other pieces like this one, but for a less technical audience?" |
 | `recommend_for_prospect` | "What should I send a VP of IT at a bank who's skeptical after a bad vendor experience?" |
 | `build_journey` | "Build a 5-touch sequence from awareness to decision for a data-engineering audience" — or pass `phases` for a buying-committee path |
@@ -754,16 +796,19 @@ The committee lens is fully filterable against the real Pure Storage buying-comm
 Example query: Security Owner, risk-reduction proof, validation phase →
 `committeePersona=security_owner&force=anxiety&phase=validation`.
 
-That example query currently matches **406 assets** (2026-08-18).
+That example query currently matches **217 assets** (2026-11-13). Swap `phase` for
+`primaryPhase=validation` and it narrows to the **86** whose main job is validation, which is the
+tighter list when a rep wants proof pieces rather than anything that touches validation.
 
 ### 4.4 Content strategy — the quarterly gap review
 
 **Use:** `GET /coverage/jtbd` or the `analyze_content_coverage` MCP tool.
 
 One call answers "what should we create next?": which of the 18 jobs are under-covered, which
-buying phases have holes (purchase: 2.0%, 90 assets), which committee personas we barely speak
-to (non-technical leader: 6.6%, data leader: 7.8% — full breakdown in §2.5), and the per-job ×
-per-phase grid showing exactly which combinations have **zero** coverage.
+buying phases have holes (purchase: 2.5%, 118 assets; consensus creation: 4.8%), which
+committee personas we barely speak to (non-technical leader: 6.1%, data leader: 9.3% — full
+breakdown in §2.5), and the per-job × per-phase grid showing exactly which combinations have
+**zero** coverage.
 `generate_content_brief` turns those same gaps directly into suggested formats and
 rationales — no separate analysis step needed. `analyze_corpus_gaps` complements both with
 emergent topics that keep appearing in content but aren't formally tagged yet.
@@ -852,6 +897,15 @@ Recommendation results also carry a ⚠ flag on brand-stale items.
     `POST /v1/artifacts/search`, `"product": []` matches nothing (0 results, like `type: []` always
     did). MCP `find_artifacts` ignores an empty list, as if the key were absent. The anonymous
     `/v1/public` search rejects it with a `400`. To filter on nothing, leave the key out.
+13. **`phase` results got smaller on 2026-11-13, and that's intended.** An artifact's
+    `journeyPhases` used to list every phase the classifier thought it touched (about two per
+    asset). Now they list only phases with a share of 25 or more (about 1.6). Saved queries on
+    `phase` will return fewer, better-matched results; for example, Security Owner + anxiety +
+    validation went from 406 to 217. For the single main phase, use `primaryPhase`.
+14. **No `primaryPhase` doesn't mean unclassified.** `null` on a product page or hub is normal
+    (multi-duty). On a resource it means the content splits across phases, and
+    `jtbd.primary_phase_missing` is `true`. Check `supportedPhases` and `jtbd.phase_shares` to see
+    the mix.
 
 ## 6. Reporting issues
 
