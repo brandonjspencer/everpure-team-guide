@@ -18,6 +18,8 @@ Each artifact is deeply analyzed for:
 - **What progress it serves** — Jobs-To-Be-Done from a locked 18-job catalog, the demand-side
   forces it acts on (push / pull / anxiety / habit), and the alternative it positions against
 - **What it's about** — products, solutions, industries, topics (220 canonical taxonomy slugs)
+- **Who it's about** — the named customers each piece features or mentions, and the list of
+  customers with live stories today (§2.11)
 - **When to use it** — surfacing signals ("send this when the prospect asks about…"), journey
   sequencing hints, brand-compliance status
 
@@ -72,6 +74,8 @@ comma-separated multi-values (`?type=ebook,video`); results are paginated.
 | `stage` | `awareness`, `education`, `consideration`, `decision`, `validation`, `expansion`, `advocacy` | Funnel buying stage |
 | `phase` | `problem_identification`, `solution_exploration`, `requirements_building`, `validation`, `consensus_creation`, `supplier_selection`, `purchase` | B2B buying-process phase (Gartner-style committee work) |
 | `primaryPhase` | same 7 values as `phase` | Only content whose **primary** buying-process phase is one of these — the phase most of the content serves. `phase` matches any phase the content supports; `primaryPhase` is the strict version. Content with no primary never matches. See "Primary buying phase" below. |
+| `customer` | Customer slugs from `GET /customers` (§2.11), or a plain name (`?customer=rivian`, `?customer=Virgin%20Media`) | Content linked to any of these customers. The old name of a merged customer still works |
+| `customerRole` | `featured`, `mentioned` | With `customer`: only content about the customer (`featured`), or only content that names them in passing (`mentioned`). Either role when unset |
 | `job` | JTBD catalog slugs, e.g. `survive-a-ransomware-attack` — full 18-job list: [jtbd-catalog.md](./jtbd-catalog.html) (or the `get_jtbd_catalog` MCP tool) | The buyer progress the content serves |
 | `force` | `push`, `pull`, `anxiety`, `habit` | Demand-side force the content acts on |
 | `committeePersona` | `technical_leader`, `non_technical_leader`, `infrastructure_owner`, `technical_infra_operator`, `platform_engineering`, `security_owner`, `procurement_finance_sustainability`, `enterprise_ai_leader`, `data_leader` — full behavioral detail on each: [personaReference.ts](https://github.com/brandonjspencer/everpure-artifact-intelligence/blob/main/src/config/personaReference.ts) (or the `get_persona_reference` MCP tool) | Buying-committee role targeted |
@@ -99,6 +103,10 @@ curl -s -H "x-api-key: $EVERPURE_API_KEY" \
 # Case studies whose main job is validation (410 of the 531 case studies today)
 curl -s -H "x-api-key: $EVERPURE_API_KEY" \
   "$EVERPURE_API/artifacts?type=case-study&primaryPhase=validation&limit=10"
+
+# Everything about Rivian (6 pieces today; drop customerRole to add the 5 that mention them)
+curl -s -H "x-api-key: $EVERPURE_API_KEY" \
+  "$EVERPURE_API/artifacts?customer=rivian&customerRole=featured"
 ```
 
 **Primary buying phase.** Every artifact is ranked by how much of its content serves each of the
@@ -127,6 +135,9 @@ classified each day.
 
 `GET /artifacts` and `GET /artifacts/:id` return `primaryPhase` (or `null`) and
 `supportedPhases` on every artifact. Search results and `/summary` cards don't carry them yet.
+
+They also return `customers`: `[{ slug, name, role }]`, featured customers first, or `[]` when the
+piece names none (§2.11). Search results and `/summary` cards don't carry it.
 
 Related single-artifact reads:
 
@@ -619,6 +630,62 @@ everpuredata.com to find it, the website needs a redirect/proxy for
 `/.well-known/agent-card.json` or a link to it — that is a website-side change, not something
 the main repo can do.
 
+### 2.11 Customers — `GET /customers`
+
+Every artifact is linked to the named customers it talks about, with one of two roles:
+
+- **`featured`**: the piece is about them. Case studies, customer videos, TrustRadius reviews,
+  award write-ups. Usually one customer per piece.
+- **`mentioned`**: named in passing as a user of Everpure, as in a blog post, webinar or
+  product page that cites them as proof.
+
+Technology partners named for an integration (VMware, Veeam, NVIDIA as a platform), analysts,
+competitors and Everpure itself are not customers. Anonymised stories ("a leading US telecom
+provider") get no link: nothing is guessed.
+
+**Active customers.** A customer is active while at least one available artifact features them.
+This is worked out when you ask, so when a customer's last story is unpublished they drop off the
+list on the next call, with nothing to update. Customers who are only ever mentioned are not
+active.
+
+| Route | What it returns |
+|---|---|
+| `GET /customers` | Active customers, most-featured first. Each has `slug`, `name`, `industry`, `active`, `featuredCount`, `mentionedCount`, `latestFeaturedAt` and up to three `featured` artifacts (newest first). Params: `industry` (a taxonomy slug), `q` (name search, also matches old names), `includeInactive=true` (adds mentioned-only customers and those with no live featured story), `limit` (≤ 500, default 100), `offset`. |
+| `GET /customers/:slug` | One customer, their `aliases`, and every available artifact that features or mentions them, with its `role`. An old name of a merged customer resolves to the current one. `404` if unknown. |
+
+Both need `artifacts:read`. Customers are not exposed on the anonymous `/v1/public` surface.
+
+A customer's `industry` is the most common industry tag on the content that features them
+(`cross-industry` ignored). It isn't stored separately, so it follows the content.
+
+```bash
+# Active healthcare customers (42 today)
+curl -s -H "x-api-key: $EVERPURE_API_KEY" "$EVERPURE_API/customers?industry=healthcare"
+
+# One customer and every piece that names them
+curl -s -H "x-api-key: $EVERPURE_API_KEY" "$EVERPURE_API/customers/virgin-media-o2"
+```
+
+Where the corpus stands (2026-11-16): **341 active customers** out of 407 named. **1,115 links**
+(713 featured, 402 mentioned) on 822 artifacts. **498 of the 524 case studies** feature a named
+customer; the other 26 are correctly empty (anonymised stories, retired "do not use" pages, award
+hubs). Outside case studies, customers are named in 84 blog posts, 55 webinars, 52 product pages,
+38 videos and 33 solution briefs. By industry, the most active customers are in financial services
+(59), government (43), healthcare (42) and service providers (33).
+
+How it's kept current:
+
+- New and changed content gets its customer links as part of daily classification.
+- Spelling variants were merged on 2026-11-16: 55 duplicates folded into 44 customers (for example
+  "Dominos" into Domino's Pizza and "Virgin Media" into Virgin Media O2). The old names are kept as
+  aliases, so filters, lookups, name search and the daily classifier all land on the one customer.
+- Parent companies and their divisions stay separate on purpose (THG and THG Ingenuity, Dentons
+  and Dentons UKIME, Kakao and Kakao Pay).
+- A link added by hand is kept when the content is reclassified.
+
+The corpus Google Sheet ("Artifact Tagging" tab) has a **Customers** column: featured customers
+first, mentioned ones suffixed "(mentioned)".
+
 ## 3. The MCP server
 
 The same engine, exposed as tools an AI agent can call. Ask questions in plain English; the
@@ -711,13 +778,14 @@ command produces under the hood:
 }
 ```
 
-### 3.2 The 18 tools
+### 3.2 The 19 tools
 
 | Tool | Ask it like… |
 |---|---|
-| `find_artifacts` | "What content do we have about data tiering for a healthcare CIO?" — a ranked shortlist (capped at 20), not exhaustive. Takes `primaryPhase` as well as `phase` ("case studies whose main job is validation") |
-| `list_artifacts` | "Pull together every piece of content for Infrastructure Owners in healthcare" — no ranking, no cap, real `total`/`offset` pagination so nothing is silently dropped. Use this over `find_artifacts` whenever the deliverable needs to be complete (a booth kit, a content audit, a campaign list). Also takes `primaryPhase` |
-| `get_artifact_detail` | "Tell me everything about this piece" (by URL, slug, or id). Includes a line such as `Buying-process phase: primary validation · also supports consensus_creation`, or the phases plus why there's no primary (multi-duty page, or a flagged resource) |
+| `find_artifacts` | "What content do we have about data tiering for a healthcare CIO?" — a ranked shortlist (capped at 20), not exhaustive. Takes `primaryPhase` as well as `phase` ("case studies whose main job is validation"), and `customer` / `customerRole` |
+| `list_artifacts` | "Pull together every piece of content for Infrastructure Owners in healthcare" — no ranking, no cap, real `total`/`offset` pagination so nothing is silently dropped. Use this over `find_artifacts` whenever the deliverable needs to be complete (a booth kit, a content audit, a campaign list). Also takes `primaryPhase` and `customer` / `customerRole` |
+| `get_artifact_detail` | "Tell me everything about this piece" (by URL, slug, or id). Includes a line such as `Buying-process phase: primary validation · also supports consensus_creation`, or the phases plus why there's no primary (multi-duty page, or a flagged resource). Also a `Customers: featured … · mentioned …` line |
+| `list_customers` | "Which healthcare customers can I cite?" / "Do we still have a live Rivian story?" Active customers by default, with counts, industry and an example story. The slug it returns is what `find_artifacts` and `list_artifacts` take as `customer` |
 | `find_similar` | "Are there other pieces like this one, but for a less technical audience?" |
 | `recommend_for_prospect` | "What should I send a VP of IT at a bank who's skeptical after a bad vendor experience?" |
 | `build_journey` | "Build a 5-touch sequence from awareness to decision for a data-engineering audience" — or pass `phases` for a buying-committee path |
@@ -906,6 +974,12 @@ Recommendation results also carry a ⚠ flag on brand-stale items.
     (multi-duty). On a resource it means the content splits across phases, and
     `jtbd.primary_phase_missing` is `true`. Check `supportedPhases` and `jtbd.phase_shares` to see
     the mix.
+15. **A case study with `customers: []` is usually right.** Anonymised stories never get a
+    customer link. If a named story has none, report it with the URL; a missed customer can be
+    linked by hand, and that link survives reclassification.
+16. **Customer counts cover available content only; browse doesn't.** `GET /customers` counts
+    only available content, but `GET /artifacts?customer=…` is browse, so it can also return
+    `redirected` pieces (gotcha 8). Add `sourceStatus=live,newly-gated` to match the counts.
 
 ## 6. Reporting issues
 
