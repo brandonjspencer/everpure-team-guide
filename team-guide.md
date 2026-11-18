@@ -625,6 +625,14 @@ load — the boot log names the problem). It is informational and never turns he
 carries the same as `everpure_public_discovery_enabled` and `everpure_public_discovery_exclusions_invalid`
 gauges, for an alert.
 
+**Watching anonymous traffic.** Anonymous requests are *not* written to the usage table that keyed
+calls go to: every row would carry the same anonymous identity (no key, no IP) and, at the combined
+ceilings, sustained traffic could add millions of rows a day. They are counted in memory instead:
+`/v1/metrics` has `everpure_public_requests_total{route,status}` (cumulative since the process
+started, 429s and 4xx included), and once an hour the app log gets one `public discovery usage` line
+with that hour's counts by route and status, written only when there was traffic. Counters reset
+on every deploy or restart; the hourly log lines are the history.
+
 The agent card is served from the API's own `onrender.com` origin. For agents landing on
 everpuredata.com to find it, the website needs a redirect/proxy for
 `/.well-known/agent-card.json` or a link to it — that is a website-side change, not something
