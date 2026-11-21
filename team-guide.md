@@ -485,12 +485,14 @@ the path** — every response is a database or reference-document lookup, so it 
 
 | Skill (agent-card id) | Call | Notes |
 |---|---|---|
-| Agent card | `GET /.well-known/agent-card.json` (also `GET /v1/public/.well-known/agent-card.json`) | Lists the five skills with a JSON Schema of each request (`x-everpure-input`), the limits, and how to read `confidence`. `authentication.schemes` is `["none"]`. |
+| Agent card | `GET /.well-known/agent-card.json` (also `GET /v1/public/.well-known/agent-card.json`) | Lists the six skills (seven with customers switched on) with a JSON Schema of each request (`x-everpure-input`), the limits, and how to read `confidence`. `authentication.schemes` is `["none"]`. |
 | `get_taxonomy` | `GET /v1/public/taxonomy` | Slugs and labels for products, solutions, industries, topics, job functions — use them as search filters. |
 | `get_jtbd_catalog` | `GET /v1/public/jtbd-catalog` | The 18 jobs as `id`, `slug`, `label`, `statement` only. |
 | `get_stage_crosswalk` | `GET /v1/public/stage-crosswalk` | Buying-process phase ↔ JTBD stage ↔ funnel stage mapping. |
 | `find_artifacts` | `POST /v1/public/artifacts/search` | Semantic + filtered search. See below. |
 | `find_similar` | `GET /v1/public/artifacts/:id/similar?limit=` | Public content closest to a given artifact id. May return fewer than `limit` when many of the nearest neighbours are gated. |
+| `recommend_content` | `POST /v1/public/artifacts/recommend` | The recommendation engine (§2.3) over public content only. See below. |
+| `find_customer_stories` | `GET /v1/public/customers?industry=&q=&limit=` | **Off unless `PUBLIC_CUSTOMERS_ENABLED` is also set** (whether customer names go to outside agents is still an open decision). See below. |
 
 The reference documents are deliberately **trimmed views**: no changelog notes, no internal
 file paths, no buyer-psychology fields (forces, personas, emotional/social dimensions), and
@@ -526,6 +528,33 @@ embeddings. Only **public-tier** content is ever returned; that is forced on the
             "confidence": "high", "lowConfidence": false, "degraded": false }
 }
 ```
+
+**Recommend** (`POST /v1/public/artifacts/recommend`) runs the same engine as §2.3, with public
+content only:
+
+- **What the visitor told you:** at least one of `topics` (≤10), `context` (free text, ≤500
+  characters), `industry`, `jobTitle` or `job` (catalog slugs, ≤5).
+- **Optional:** `stage` (funnel stage), `alreadySeen` (≤20 artifact ids to leave out),
+  `hasWatchedDemo`, and `limit` (1–10, default 3).
+- **`currentArtifactId`:** the page the visitor is on. Each pick then carries the verified
+  `navigation` signal, saying whether that page really links to it. It only applies when that page is
+  public itself; otherwise it is ignored and `meta.currentArtifactUsed` is `false`.
+- **What comes back:** each pick has the public artifact fields, a `score` and a plain-language `why`,
+  plus the next-step `cta` (`pathfinder`, `demo` or `meeting`).
+- **What's held back:** the score breakdown, and engagement as a reason. Traffic never reaches an
+  anonymous caller, not even as an explanation.
+- Calls are not written to the recommendation log, and they share the search rate limit.
+
+**Customer stories** (`GET /v1/public/customers`) lists named customers that public stories feature,
+newest story first:
+
+- **Filters:** `industry` and `q` (part of a name or alias), with `limit` 1–10, default 5.
+- **Each customer:** `slug`, `name`, `industry`, `storyCount`, `latestStoryAt`, and up to three
+  `stories` (title, URL, type, date).
+- **Counts:** only public, retrievable stories count, and excluded pages are left out. Mention counts
+  aren't returned.
+- **Switch:** it needs `PUBLIC_CUSTOMERS_ENABLED=true` as well as the main switch. Without it the path
+  is a `404`, and the agent card doesn't list the skill.
 
 Some pages are public and live but answer no question an agent asks — thank-you and "Registration
 Confirmed" pages, `/forms/…`, the meeting-scheduler page, the 404 page, a stray test page, a
