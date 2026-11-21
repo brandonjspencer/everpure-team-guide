@@ -817,6 +817,18 @@ its REST equivalent (`artifacts:read`, `journeys:read`, `taxonomy:read`, `corpus
 `taxonomy:read` like the other reference tools. If it vanished from your tool list, your key lacks
 that scope.
 
+**Every tool also returns structured JSON** (server version 1.1.0 onward). Each result carries the
+same readable text it always did, plus a typed `structuredContent` object described by the
+tool's `outputSchema`, so a script or agent can use fields directly instead of parsing prose:
+`list_artifacts` gives `total` and `nextOffset`, `get_artifact_detail` gives `primaryPhase`,
+`forcesAddressed` and `customers`, and `build_journey` gives every step's picks with
+`verified` and `sitemapAttached`. Advisory lines from the text (the competitive-signal note,
+"semantic ranking unavailable", "run check_brand_compliance first") are repeated in a `notes`
+array, so nothing is lost if your client shows only the JSON. Shapes are open: new fields may
+appear, and existing ones won't be removed without a version bump. Like the text, the JSON never
+contains cloaked tags. One gain over the text: `get_jtbd_catalog` includes each job's
+functional, emotional and social dimensions.
+
 Plus two ambient **resources** an agent can read as context: `everpure://taxonomy` and
 `everpure://library-summary`.
 
