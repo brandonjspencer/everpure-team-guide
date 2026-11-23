@@ -485,11 +485,12 @@ the path** — every response is a database or reference-document lookup, so it 
 
 | Skill (agent-card id) | Call | Notes |
 |---|---|---|
-| Agent card | `GET /.well-known/agent-card.json` (also `GET /v1/public/.well-known/agent-card.json`) | Lists the six skills (seven with customers switched on) with a JSON Schema of each request (`x-everpure-input`), the limits, and how to read `confidence`. `authentication.schemes` is `["none"]`. |
+| Agent card | `GET /.well-known/agent-card.json` (also `GET /v1/public/.well-known/agent-card.json`) | Lists the seven skills (eight with customers switched on) with a JSON Schema of each request (`x-everpure-input`), the limits, and how to read `confidence`. `authentication.schemes` is `["none"]`. |
 | `get_taxonomy` | `GET /v1/public/taxonomy` | Slugs and labels for products, solutions, industries, topics, job functions — use them as search filters. |
 | `get_jtbd_catalog` | `GET /v1/public/jtbd-catalog` | The 18 jobs as `id`, `slug`, `label`, `statement` only. |
 | `get_stage_crosswalk` | `GET /v1/public/stage-crosswalk` | Buying-process phase ↔ JTBD stage ↔ funnel stage mapping. |
 | `find_artifacts` | `POST /v1/public/artifacts/search` | Semantic + filtered search. See below. |
+| `read_artifact` | `GET /v1/public/artifacts/:id` | One public resource for a reader view: the allowlisted fields plus up to four `takeaways` and up to four `problems`. Never the page body. See below. |
 | `find_similar` | `GET /v1/public/artifacts/:id/similar?limit=` | Public content closest to a given artifact id. May return fewer than `limit` when many of the nearest neighbours are gated. |
 | `recommend_content` | `POST /v1/public/artifacts/recommend` | The recommendation engine (§2.3) over public content only. See below. |
 | `find_customer_stories` | `GET /v1/public/customers?industry=&q=&limit=` | **Off unless `PUBLIC_CUSTOMERS_ENABLED` is also set** (whether customer names go to outside agents is still an open decision). See below. |
@@ -550,11 +551,20 @@ newest story first:
 
 - **Filters:** `industry` and `q` (part of a name or alias), with `limit` 1–10, default 5.
 - **Each customer:** `slug`, `name`, `industry`, `storyCount`, `latestStoryAt`, and up to three
-  `stories` (title, URL, type, date).
+  `stories` (id, title, URL, type, date). A story's `id` works with `read_artifact`.
 - **Counts:** only public, retrievable stories count, and excluded pages are left out. Mention counts
   aren't returned.
 - **Switch:** it needs `PUBLIC_CUSTOMERS_ENABLED=true` as well as the main switch. Without it the path
   is a `404`, and the agent card doesn't list the skill.
+
+**Reader** (`GET /v1/public/artifacts/:id`) returns one resource so a page or agent can show it
+without sending the visitor away:
+
+- **What comes back:** `artifact` (the same allowlisted fields as search), `takeaways` (the outcomes the
+  piece promises, up to four) and `problems` (the problems it addresses, up to four).
+- **What's held back:** the page body, traffic, sales triggers, and anything not on the allowlist.
+- **Not found:** gated, retired, newly gated or excluded pages are a `404`, the same as an unknown id.
+- It shares the read rate limit.
 
 Some pages are public and live but answer no question an agent asks — thank-you and "Registration
 Confirmed" pages, `/forms/…`, the meeting-scheduler page, the 404 page, a stray test page, a
