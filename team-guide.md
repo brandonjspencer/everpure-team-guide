@@ -87,6 +87,9 @@ comma-separated multi-values (`?type=ebook,video`); results are paginated.
 | `accessTier` | `public`, `gated` | Lead-gate status |
 | `ageBucket` / `stalenessRisk` | `current`…`archived` / `low`…`critical` | Freshness |
 | `publishedAfter` / `publishedBefore` | ISO dates | Publish window |
+| `updatedAfter` | ISO date or timestamp | Only artifacts whose record changed on or after this moment (`updatedAt`): re-crawled, reclassified, retired, reviewed. For incremental syncs; see §2.12 |
+| `sourceStatus` | `live`, `newly-gated`, `gone`, `redirected` | Browse returns retired pieces too; `sourceStatus=live,newly-gated` keeps only what is still published (§2.12) |
+| `needsReview` | `true`, `false` | The `needsHumanReview` flag. Read `reviewReasons` before relying on it (§2.12) |
 | `fields` | comma-separated field names | Sparse responses (id always included) |
 | `limit` / `offset` / `sort` / `order` | limit ≤ 100; sort: `publishedAt`, `createdAt`, `updatedAt`, `title`, `confidence` | Paging |
 
@@ -374,6 +377,33 @@ Committee-persona coverage, current buying-committee taxonomy (§2.1):
 - `GET /taxonomy/persona-reference` — full behavioral detail (roles, priorities, decision
   criteria, messaging do/don't) for each of the 9 `committeePersona` values.
 - The 18-job JTBD catalog: [jtbd-catalog.md](./jtbd-catalog.html)
+
+**How the lists are shaped** (as of 2026-11-24):
+
+- **Industries are flat.** There are 20 and none has children. Sub-sectors fold into their
+  parent: banking, insurance and capital markets are all `financial-services`; healthcare
+  providers and payers are both `healthcare`. You can't filter on the sub-sector.
+- **`cross-industry` means "not aimed at a particular industry"**, not "written for every
+  industry". 2,386 artifacts carry it alone, 540 carry it beside a specific industry (the specific
+  one is the meaningful tag), and 722 carry no industry at all. Treating it as "no industry" is
+  right.
+- **Solutions are only partly nested.** 14 of the 47 have a `parentSlug` (for example
+  `ai-factory` → `artificial-intelligence`, `oracle-database` → `database-workloads`,
+  `hybrid-cloud` → `cloud`, `nutanix` → `virtualization`); the other 33 stand alone. A plan to
+  match the site's `/solutions/` tree (AI, Cyber Resilience, Virtualization, Databases,
+  Application Development, Cloud, HPC as the parents, with the rest moved to a themes list) is
+  approved but not done yet. Expect slugs to move when it lands; old slugs will keep working as
+  synonyms.
+- **Topics and solutions are separate lists that overlap.** `topic:ai-infrastructure` (633
+  artifacts) is the narrower "infrastructure for AI" subject; `solution:artificial-intelligence`
+  (1,024) is the broad AI solution area. 96% of the topic's artifacts also carry the solution, so
+  filter on the solution for "anything about AI" and add the topic to narrow it.
+- **Old committee-persona slugs.** `economic_buyer`, `technical_evaluator`, `champion`,
+  `executive_sponsor` and `ai_platform_owner` are the persona list from before 2026-08-14. They
+  survive only on 9 `redirected` (retired) artifacts and disappear once you filter
+  `sourceStatus=live`. As filters they still work, expanded to their new equivalents. Not to be
+  confused with `buyerPersonas` (`economic-buyer`, `champion`, … with hyphens), a separate,
+  current field: the classic five buyer roles.
 
 **Synonyms resolve automatically.** `product` / `solution` / `industry` / `topic` filters (on
 `GET /artifacts`, `POST /artifacts/search`, `find_artifacts`) and the `industry` field on
@@ -733,6 +763,67 @@ How it's kept current:
 The corpus Google Sheet ("Artifact Tagging" tab) has a **Customers** column: featured customers
 first, mentioned ones suffixed "(mentioned)".
 
+### 2.12 Keeping a copy in sync, and reading the quality signals
+
+For teams that load the whole catalog into their own tool (an agent's index, a warehouse) and
+refresh it nightly.
+
+**Full load.** Page through `GET /artifacts?limit=100&offset=…`: about 48 calls for the 4,737
+artifacts browse returns today. Add `fields=` to leave out the big text fields
+(`rawExtractedText`, `enrichedText`) if you don't need them.
+
+**Incremental load.** `GET /artifacts?updatedAfter=<when your last run started>&sort=updatedAt&order=asc`.
+`updatedAt` moves whenever the pipeline touches a record: a new classification, a re-crawl, a
+retirement, a review. Re-crawls happen weekly whether or not anything changed, so a nightly delta
+is roughly a seventh of the corpus (1,359 records on 2026-11-24), not just the real changes. It
+won't miss a pipeline change, but a few one-off corpus-wide backfills write without moving
+`updatedAt`, and customer links (§2.11) live in their own table. So run a full load weekly as well.
+
+**Retired content stays, with a status.** When a page is unpublished it isn't deleted:
+`sourceStatus` becomes `gone` (with `archivedAt`, when we confirmed it) or `redirected` (with
+`redirectedTo`). Browse returns these on purpose (166 `gone` and 14 `redirected` today), so a sync
+can see them and drop them from its index. For retrieval, filter `sourceStatus=live,newly-gated`.
+The only thing that disappears outright is an admin soft-delete, which is rare (none since
+2026-08-19); the weekly full load catches those.
+
+**Limits and keys.** 300 requests a minute per key; a full load uses a fraction of that. Outside
+weekday business hours the first call can take 30–60 seconds while the API wakes (§1), so retry
+the first request. For a scheduled job, ask Brandon for a named service key with `artifacts:read`
+and `taxonomy:read`, so the job doesn't depend on one person's key.
+
+**`needsHumanReview` and `reviewReasons`.** The flag is one true/false written by several unrelated
+rules, so on its own it doesn't track confidence or anything else. Every artifact from
+`GET /artifacts` and `GET /artifacts/:id` now also carries `reviewReasons`, the causes that hold
+today (empty when not flagged; several can apply):
+
+| Reason | Meaning | Live artifacts (2026-11-24) |
+|---|---|---|
+| `secondary-classifier` | Classified by our second classifier lane (Codex; `classificationVersion` ends `-codex-terra`). That lane always sets the flag, at any confidence, because it rates itself high. Its industry tags agreed closely with the main classifier in testing; product, solution and topic tags agreed about half the time. Mostly blog posts | 2,067 (1,479 for this reason alone) |
+| `low-confidence` | `classificationConfidence` under 0.6 | 702 |
+| `partial-content` | Only part of the piece could be read (usually gated); confidence is capped at 0.65 | 577 |
+| `refresh-failing` | Re-crawls keep failing, or refresh is paused after them | 72 |
+| `other` | None of the above holds now: the classifier itself asked for review, or an earlier event set it. `classificationRationale` usually says which | 324 |
+
+3,034 of the 4,557 live artifacts are flagged. Nobody is working through them as a queue today. The
+flag is recomputed whenever an artifact is reclassified (its content changes, or the classifier
+version moves on) and cleared when a person reviews it. Tags on flagged artifacts are still the
+best we have and fine for finding content; to rank, prefer `low-confidence` and `partial-content`
+as the demotion signals rather than the bare flag. Case studies are mostly unaffected: 84 of 524
+are flagged.
+
+**`classificationConfidence`** is the classifier's own 0–1 rating of its tags. `0` means the artifact
+hasn't been classified yet (`classificationVersion` `0.0.0`; one today). Values near zero on a
+classified piece mean there was nothing to tag: 404 pages, test pages, careers and reseller pages.
+Those are also most of the 50 artifacts with no product, solution, industry or topic, and they're
+expected to stay that way.
+
+**`legacyBrandStatus: needs-update`** means the page as published still says "Pure Storage"
+somewhere (2,534 artifacts today; for 152 of them only in the footer). It says nothing about
+whether the content is accurate or current. `legacyBrandInstances` lists each occurrence with a
+suggested rewrite, so a copywriter can cite the piece with the old name swapped for Everpure. For
+freshness, use `contentAge.stalenessRisk`. `not-scanned` means the full text wasn't readable
+(gated); `under-review` means it is waiting for a rescan.
+
 ## 3. The MCP server
 
 The same engine, exposed as tools an AI agent can call. Ask questions in plain English; the
@@ -987,16 +1078,15 @@ Recommendation results also carry a ⚠ flag on brand-stale items.
    once before reporting an outage.
 7. **Everything read-only unless your key says otherwise** — 403s on PATCH/POST-to-save are
    scope, not bugs.
-8. **`gone` content is fully removed; `redirected`/`newly-gated` are not.** As of 2026-08-18,
-   the 1,528 artifacts whose source had gone permanently dead (`sourceStatus=gone`) were
-   removed from the corpus entirely — they no longer appear anywhere, including browse and
-   coverage. `redirected`/`newly-gated` content is still handled the old way: `GET /artifacts`
-   (browse) and `GET /coverage/jtbd` show it by default — browse is the deliberate escape hatch
-   for inspecting retired-but-not-dead content, and coverage reports on everything still
-   classified. `POST /artifacts/search`, `find_similar`, `random`, and every
-   `recommend`/`build_journey` call exclude both categories — those are "what can I actually
-   point someone at" paths. Filter `sourceStatus=live` on a browse call if you want parity with
-   what search/recommend would return.
+8. **Browse shows retired content; search and recommend don't.** On 2026-08-18 the 1,528
+   artifacts that had gone permanently dead by then were removed from the corpus entirely. Pages
+   unpublished since then are kept with `sourceStatus=gone` (166 today), like `redirected` and
+   `newly-gated` pieces, so `GET /artifacts` (browse) and `GET /coverage/jtbd` show them by
+   default: browse is the deliberate escape hatch for inspecting retired content, and lets a sync
+   see what to drop (§2.12). `POST /artifacts/search`, `find_similar`, `random`, and every
+   `recommend`/`build_journey` call exclude `gone` and `redirected`: those are "what can I
+   actually point someone at" paths. Filter `sourceStatus=live,newly-gated` on a browse call for
+   parity with what search/recommend would return.
 9. **Ranking may briefly lag on 48 recently corrected artifacts.** Until 2026-08-13
    ingestion took the first PDF link on a page as that page's own document, so an article
    that cites an outside report could absorb that report's full text — which is what
