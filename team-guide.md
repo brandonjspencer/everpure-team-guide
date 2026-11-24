@@ -543,7 +543,7 @@ curl -s -X POST "$BASE/v1/public/artifacts/search" \
 |---|---|
 | `limit` | 1–10, default 5. Anything higher is a `400`, not clamped. You can get fewer than `limit` back: results under the relevance floor are withheld, and so are the excluded pages described below. |
 | `minScore` | 0–1. Can **raise** the relevance floor for this request, never lower it. |
-| `filter` | `product`, `solution`, `industry`, `topic`, `job` are slug lists (≤10 each); taxonomy synonyms resolve as in §2.6 (`fintech` → `financial-services`) and an unknown slug quietly matches nothing. `type`, `stage` and `phase` are fixed vocabularies: an unknown value is a `400`; `type` takes ≤5 values, and `stage`/`phase` have 7 values each. Every list you send must be non-empty (`[]` is a `400`, not "no filter" — leave the key out instead), and no value or `query` may contain a NUL character. |
+| `filter` | `product`, `solution`, `industry`, `topic`, `job` are slug lists (≤10 each); taxonomy synonyms resolve as in §2.6 (`fintech` → `financial-services`) and an unknown slug quietly matches nothing. `type`, `stage` and `phase` are fixed vocabularies: an unknown value is a `400`; `type` takes ≤5 values, and `stage`/`phase` have 7 values each. Every list you send must be non-empty (`[]` is a `400`, not "no filter" — leave the key out instead), and no value or `query` may contain a NUL character. `publishedAfter` (an ISO 8601 date) keeps only pieces published after it, for "what's new since…" questions; the ranking is unchanged, and a value that isn't a date is a `400`. |
 | anything else | Ignored — including any `accessTier` the caller sends. |
 
 **What comes back** — each result carries only: `id`, `url`, `title`, `description`,
