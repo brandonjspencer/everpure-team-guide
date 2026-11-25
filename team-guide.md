@@ -525,6 +525,8 @@ the path** — every response is a database or reference-document lookup, so it 
 | `find_similar` | `GET /v1/public/artifacts/:id/similar?limit=` | Public content closest to a given artifact id. May return fewer than `limit` when many of the nearest neighbours are gated. |
 | `recommend_content` | `POST /v1/public/artifacts/recommend` | The recommendation engine (§2.3) over public content only. See below. |
 | `find_partners` | `GET /v1/public/partners?place=&limit=` | Partners who sell Everpure, for a country or region. See below. |
+| `find_technology_partners` | `GET /v1/public/partners/alliances?name=` | Technology alliance partners (Veeam, NVIDIA, Epic…), or the one a name or question refers to. See below. |
+| — | `GET /v1/public/partners/program` | The partner program, for companies that want to become partners. See below. |
 | `find_customer_stories` | `GET /v1/public/customers?industry=&q=&limit=` | **Off unless `PUBLIC_CUSTOMERS_ENABLED` is also set** (whether customer names go to outside agents is still an open decision). See below. |
 
 The reference documents are deliberately **trimmed views**: no changelog notes, no internal
@@ -592,6 +594,21 @@ profile pages on everpuredata.com (resellers, managed service providers, global 
   total, and `directory`: the Partner Finder, which has contact details for every partner.
 - Partner details are partner-provided and unverified; the profiles say so. There's no separate switch:
   partner profiles are public pages.
+
+**Technology partners** (`GET /v1/public/partners/alliances`) lists the companies whose products work with
+Everpure's and have their own page on everpuredata.com (21 today):
+
+- **Without `name`:** every one, by name. **With `name`:** a partner name or a question that names one
+  ("veeam", "Does Everpure work with Veeam?", "OpenShift" → Red Hat); `data` holds that one partner and
+  `related` up to four more public pieces that name them in their title. No match returns an empty `data`.
+- **Each partner:** `slug`, `name`, `id` (their page; works with `read_artifact`), `title`, `url`, the
+  Everpure `products` and `solutions` the page covers, and `testDrive` (a hands-on lab of the two together,
+  or `null`). `meta.directory` is the full list on the site.
+
+**Partner program** (`GET /v1/public/partners/program`) is for companies that want to become partners:
+`pages` are the program's pages, each with a `track` (`overview`, `apply`, `reseller`, `msp`, `gsi`,
+`alliance`, `services`, `certifications`, `portworx`, `events`), `news` is the latest partner-program
+news from the blog, and `meta` has the Become a Partner and Request Access links.
 
 **Customer stories** (`GET /v1/public/customers`) lists named customers that public stories feature,
 newest story first:
@@ -883,6 +900,7 @@ taxonomy (§2.6), so a correction can't introduce a new term.
 | Save corrections (`S`) | Writes the changed tags, clears the flag, and locks every tag on the card |
 | Company page (`C`) | Real site content that isn't about products, such as careers pages. Keeps the piece, applies any other tag edits, clears products, solutions, industries and topics and locks them empty, and clears the flag |
 | Partner profile (`P`, partner profiles only, in place of Company page) | Tags it as the partner rule does (below) and locks those tags |
+| Partner program (`P`, partner-program pieces only, in place of Company page) | For pages and news aimed at would-be partners: applies any other tag edits, clears products, solutions, industries and topics and locks them empty |
 | Not useful (`N`), then **It's low value** (`1`) | Keeps the piece as it is and clears the flag |
 | Not useful, then **It isn't marketing content** (`2`) | Removes the piece from the corpus: test pages, form steps, 404s |
 | Not useful, then **It's retired or out of date** (`3`) | Removes the piece and puts it on the web team's list |
@@ -911,10 +929,22 @@ topics; persona, audience and technical depth keep what the classifier said. A w
 **Apply to all N profiles** above the list (with a confirm step): it applies the rule to exactly the
 profiles listed, each logged as proposed by `partner-rule` and approved by the person who clicked.
 Reviewers see the rule and can still give any one profile its own decision. New profiles the crawl
-adds later land in the same set. Partner program pages (become a partner, the TAP application,
-certifications) aren't profiles: choose Company page for them. On the sandbox site, "find a partner in
-Germany" gets a chat answer that routes to the Partner Finder, with the partners who sell there in the
-pane (`GET /v1/public/partners`, §2.10); "how do I become a partner?" routes to the partner program.
+adds later land in the same set. On the sandbox site, "find a partner in Germany" gets a chat answer
+that routes to the Partner Finder, with the partners who sell there in the pane (`GET /v1/public/partners`,
+§2.10).
+
+**The partner program has its own set and rule too.** **Partner program** in the first filter holds the
+pages for companies that want to become partners (the program overview, Become a Partner, Request Access,
+the reseller, MSP, integrator, alliance and services tracks, the certifications overview, Portworx's partner
+program, Partner Fast Start and the Accelerate Partner Forum) and partner-program news on the blog (partner
+awards, the program, the partner forum; not "Everpure partners with…" announcements). It's left out of every
+other set. Its rule clears products, solutions, industries and topics, like a company page, logged as proposed
+by `partner-program-rule`. These pieces aren't company pages: the sandbox shows them to would-be partners
+("how do I become a partner?" opens the program by track, with partner events and news, and routes to Become
+a Partner) and keeps them out of buyers' reading. **Not in this set:** technology alliance pages (Veeam,
+NVIDIA, Epic…) and individual certification pages are product content, so triage them normally with product
+tags; "does Everpure work with Veeam?" on the sandbox opens that partner's card from them. The Partner Finder
+is where buyers go: give it the Decision stage and no products.
 
 Locked tags survive reclassification: when the classifier re-tags a piece, the reviewer's values
 win for every field on the card. A reviewed piece only comes back into the queue if its content
@@ -934,13 +964,14 @@ Below that is every event of the last 30 days, which **Download CSV** saves as a
 for a reviewer, `200` and applied for an approver), `GET /v1/review/proposals`,
 `POST /v1/review/proposals/:id/approve`, `/reject` (`{ "note": … }`) and `/withdraw`,
 `POST /v1/review/items/:id/restore`, `GET /v1/review/removed`, `GET /v1/review/log?days=30`,
-`GET /v1/review/stats`, `GET /v1/review/options` and `GET /v1/review/me`, plus the partner rule:
-`GET /v1/review/partner-rule` (the profiles it would tag, with each one's details and the fields it
-would change) and `POST /v1/review/partner-rule/apply` (`{ "ids": [...] }`, the ids previewed).
+`GET /v1/review/stats`, `GET /v1/review/options` and `GET /v1/review/me`, plus the partner rules:
+`GET /v1/review/partner-rule` and `GET /v1/review/partner-program-rule` (the pieces each would tag, with
+the fields it would change) and `POST …/apply` on each (`{ "ids": [...] }`, the ids previewed).
 `decision` is one of `confirmed`, `corrected` (with `changes`), `company-page` (optionally with
-`changes`), `partner-profile` (partner profiles only), `low-value` or `removed` (with `removalReason`:
-`not-content` or `retired`). The queue's `reason` adds `partner-profiles`. Approving, rejecting,
-restoring and applying the partner rule need `artifacts:review-approve`.
+`changes`), `partner-profile` (partner profiles only), `partner-program` (partner-program pieces only,
+optionally with `changes`), `low-value` or `removed` (with `removalReason`: `not-content` or `retired`).
+The queue's `reason` adds `partner-profiles` and `partner-program`. Approving, rejecting, restoring and
+applying a partner rule need `artifacts:review-approve`.
 
 ## 3. The MCP server
 
