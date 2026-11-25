@@ -38,6 +38,7 @@ Postman) and an **MCP server** (for AI agents — Claude Desktop, Claude Code, c
 | Interactive docs | [`/docs`](https://everpure-artifact-api.onrender.com/docs) — full Swagger UI, try any endpoint in the browser (click **Authorize** and paste the key Brandon gave you) |
 | OpenAPI spec | [`/openapi.json`](https://everpure-artifact-api.onrender.com/openapi.json) — import into Postman/Insomnia for a ready-made collection |
 | Health check | [`GET /v1/health`](https://everpure-artifact-api.onrender.com/v1/health) — no auth required |
+| Everpure Intelligence Triage (PMM) | [`/review`](https://everpure-artifact-api.onrender.com/review) — check and correct tags on pieces the classifier wasn't sure about; needs a review key (§2.13) |
 
 > **Free-tier note:** a scheduled health check keeps the REST API warm on weekdays, roughly
 > 6am–6pm Pacific, so it responds quickly during business hours. Outside that window it spins
@@ -804,9 +805,11 @@ today (empty when not flagged; several can apply):
 | `refresh-failing` | Re-crawls keep failing, or refresh is paused after them | 72 |
 | `other` | None of the above holds now: the classifier itself asked for review, or an earlier event set it. `classificationRationale` usually says which | 324 |
 
-3,034 of the 4,557 live artifacts are flagged. Nobody is working through them as a queue today. The
-flag is recomputed whenever an artifact is reclassified (its content changes, or the classifier
-version moves on) and cleared when a person reviews it. Tags on flagged artifacts are still the
+3,034 of the 4,557 live artifacts are flagged. PMMs work through the `low-confidence` ones on the
+triage page (§2.13). The flag is recomputed whenever an artifact is reclassified (its content
+changes, or the classifier version moves on) and cleared when a person reviews it. A reviewed
+artifact stays cleared until its content changes, and the tags the reviewer approved or corrected
+are kept through every reclassification. Tags on flagged artifacts are still the
 best we have and fine for finding content; to rank, prefer `low-confidence` and `partial-content`
 as the demotion signals rather than the bare flag. Case studies are mostly unaffected: 84 of 524
 are flagged.
@@ -823,6 +826,71 @@ whether the content is accurate or current. `legacyBrandInstances` lists each oc
 suggested rewrite, so a copywriter can cite the piece with the old name swapped for Everpure. For
 freshness, use `contentAge.stalenessRisk`. `not-scanned` means the full text wasn't readable
 (gated); `under-review` means it is waiting for a rescan.
+
+### 2.13 Triaging the review queue — Everpure Intelligence Triage (`/review`)
+
+Everpure Intelligence Triage is a page for product marketing to work through the pieces the classifier was least sure about, one
+at a time: [`/review`](https://everpure-artifact-api.onrender.com/review) on the API's own address.
+
+**Signing in.** Each reviewer has their own key with the `artifacts:review` scope (ask in
+#everpure-intelligence). That scope reaches only `/v1/review/*`: it can't read the catalog
+through the other endpoints or change anything but tags on the pieces it reviews. Every decision
+records the key's name as the reviewer. The page keeps the key for the browser tab, or on the
+device if you tick "Remember on this device".
+
+**The queue.** By default, live pieces flagged for review with confidence under 0.6 (702 today),
+lowest first. The near-zero end is mostly pages that shouldn't be in the corpus at all (test
+pages, retired pages, confirmation pages, careers pages). Filters switch to the other review reasons (§2.12),
+a content type, public or gated, or a title/URL search. Pieces that haven't been classified yet
+aren't listed.
+
+**The screen** has three columns. On the left is the queue, with each piece's confidence drawn
+as a small meter. In the middle is the piece: its link, why the classifier flagged it (its own
+note, marked when it recommends leaving the piece out of the corpus), its one-line summary and
+the start of the stored text. On the right are the tags and the decision buttons: content type,
+products, solutions, industries, topics, buying stage, buying-committee persona, technical depth
+and audience level. Products, solutions, industries and topics are picked from the canonical
+taxonomy (§2.6), so a correction can't introduce a new term.
+
+**Decisions** (keyboard shortcuts in brackets):
+
+| Decision | What it does |
+|---|---|
+| Tags look right (`A`) | Clears the flag and locks the tags as shown |
+| Save corrections (`S`) | Writes the changed tags, clears the flag, and locks every tag on the card |
+| Company page (`C`) | Real site content that isn't about products, such as careers pages. Keeps the piece, clears products, solutions, industries and topics and locks them empty, and clears the flag |
+| Not useful (`N`), then **It's low value** (`1`) | Keeps the piece as it is and clears the flag |
+| Not useful, then **It isn't marketing content** (`2`) | Removes the piece from the corpus: test pages, form steps, 404s |
+| Not useful, then **It's retired or out of date** (`3`) | Removes the piece and puts it on the web team's list |
+| Skip (`J`) | Moves on without recording anything (`K` goes back) |
+
+**Removing a piece** is a soft delete: every read (browse, search, recommendations, MCP, the public
+surface) stops returning it, the record is kept, and the daily crawl doesn't bring it back. It's
+reversible: "Undo" on the confirmation, or "Undo removal" on the piece in the History tab, puts it
+back in the corpus and the queue. Triage can only restore what triage removed. Removed pages are
+usually still published on everpuredata.com, so the History tab keeps a count of them and
+**Copy the list for the web team** copies title, URL, reason, note, reviewer and date as rows that
+paste into a sheet, Slack or an email (`GET /v1/review/removed`). Removals don't change what the
+crawl collects; a URL pattern is only added to the crawl's skip list after review, by PR.
+
+**Careers pages stay in the corpus** (they were brought in deliberately on 2026-08-31). The card
+says so on careers pieces; choose Company page for them unless one is really about products. On the
+sandbox site, careers questions get a chat answer that sends job seekers to the careers section.
+
+Locked tags survive reclassification: when the classifier re-tags a piece, the reviewer's values
+win for every field on the card. A reviewed piece only comes back into the queue if its content
+changes; even then the reviewer's tags stay until someone reviews it again. Each decision is in
+`GET /artifacts/:id/history` (`human_review`, with the decision, the fields changed and the note),
+and the reviewer's values are in the artifact's `manualOverrides`. The page's History tab lists the
+latest 30 decisions by anyone.
+
+**For scripts.** The page's API is documented under the `review` tag in [`/docs`](https://everpure-artifact-api.onrender.com/docs):
+`GET /v1/review/queue`, `GET /v1/review/items/:id`, `POST /v1/review/items/:id/decision`
+(`{ "decision": …, "changes": {…}, "removalReason": …, "note": "…" }`),
+`POST /v1/review/items/:id/restore`, `GET /v1/review/removed`, `GET /v1/review/options`,
+`GET /v1/review/me` and `GET /v1/review/recent`. `decision` is one of `confirmed`, `corrected`
+(with `changes`), `company-page`, `low-value` or `removed` (with `removalReason`: `not-content` or
+`retired`).
 
 ## 3. The MCP server
 
