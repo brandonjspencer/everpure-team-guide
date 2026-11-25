@@ -925,6 +925,7 @@ taxonomy (§2.6), so a correction can't introduce a new term.
 | Company page (`C`) | Real site content that isn't about products, such as careers pages. Keeps the piece, applies any other tag edits, clears products, solutions, industries and topics and locks them empty, and clears the flag |
 | Partner profile (`P`, partner profiles only, in place of Company page) | Tags it as the partner rule does (below) and locks those tags |
 | Partner program (`P`, partner-program pieces only, in place of Company page) | For pages and news aimed at would-be partners: applies any other tag edits, clears products, solutions, industries and topics and locks them empty |
+| Event page (`E`, event pages only, in place of Company page) | For event, live webinar and Pure Accelerate pages: sets the content type from the page (event or webinar) unless you change it, keeps the tags with any edits, and locks them |
 | Not useful (`N`), then **It's low value** (`1`) | Keeps the piece as it is and clears the flag |
 | Not useful, then **It isn't marketing content** (`2`) | Removes the piece from the corpus: test pages, form steps, 404s |
 | Not useful, then **It's retired or out of date** (`3`) | Removes the piece and puts it on the web team's list |
@@ -970,6 +971,17 @@ NVIDIA, Epic…) and individual certification pages are product content, so tria
 tags; "does Everpure work with Veeam?" on the sandbox opens that partner's card from them. The Partner Finder
 is where buyers go: give it the Decision stage and no products.
 
+**Events have their own set and rule as well.** **Events** in the first filter holds Everpure's event pages
+(`/events/…`), live webinar pages (`/events/webinars/…`) and Pure Accelerate's pages (`/accelerate/…`), left out
+of every other set. Partner Fast Start and the Accelerate Partner Forum stay in Partner program, and a
+registration's thank-you page or a marketing-ops test page stays in the main queue (usually to remove). Each card
+shows what the page says about its event: the kind, when (and whether it's past or upcoming) and where. The rule
+sets each page's content type from its address (`webinar` for a webinar page, `event` otherwise; a page the
+classifier already called a webinar keeps that) and **keeps** its tags, locked, logged as proposed by
+`events-rule`. Unlike the partner sets, the tags matter here: the sandbox offers an upcoming event to visitors
+who have read about the same topics and products, and dates come from the pages themselves (§2.10). A past
+event can still be marked low value or retired one at a time.
+
 Locked tags survive reclassification: when the classifier re-tags a piece, the reviewer's values
 win for every field on the card. A reviewed piece only comes back into the queue if its content
 changes; even then the reviewer's tags stay until someone reviews it again.
@@ -989,13 +1001,15 @@ for a reviewer, `200` and applied for an approver), `GET /v1/review/proposals`,
 `POST /v1/review/proposals/:id/approve`, `/reject` (`{ "note": … }`) and `/withdraw`,
 `POST /v1/review/items/:id/restore`, `GET /v1/review/removed`, `GET /v1/review/log?days=30`,
 `GET /v1/review/stats`, `GET /v1/review/options` and `GET /v1/review/me`, plus the partner rules:
-`GET /v1/review/partner-rule` and `GET /v1/review/partner-program-rule` (the pieces each would tag, with
-the fields it would change) and `POST …/apply` on each (`{ "ids": [...] }`, the ids previewed).
+`GET /v1/review/partner-rule`, `GET /v1/review/partner-program-rule` and `GET /v1/review/event-rule` (the
+pieces each would tag, with the fields it would change; event rows carry each page's `event` facts) and
+`POST …/apply` on each (`{ "ids": [...] }`, the ids previewed).
 `decision` is one of `confirmed`, `corrected` (with `changes`), `company-page` (optionally with
 `changes`), `partner-profile` (partner profiles only), `partner-program` (partner-program pieces only,
-optionally with `changes`), `low-value` or `removed` (with `removalReason`: `not-content` or `retired`).
-The queue's `reason` adds `partner-profiles` and `partner-program`. Approving, rejecting, restoring and
-applying a partner rule need `artifacts:review-approve`.
+optionally with `changes`), `event-page` (event pages only, optionally with `changes`; without an
+`artifactType` it takes the page's), `low-value` or `removed` (with `removalReason`: `not-content` or `retired`).
+The queue's `reason` adds `partner-profiles`, `partner-program` and `events`. Approving, rejecting, restoring and
+applying a rule need `artifacts:review-approve`.
 
 ## 3. The MCP server
 
