@@ -527,6 +527,8 @@ the path** — every response is a database or reference-document lookup, so it 
 | `find_partners` | `GET /v1/public/partners?place=&limit=` | Partners who sell Everpure, for a country or region. See below. |
 | `find_technology_partners` | `GET /v1/public/partners/alliances?name=` | Technology alliance partners (Veeam, NVIDIA, Epic…), or the one a name or question refers to. See below. |
 | — | `GET /v1/public/partners/program` | The partner program, for companies that want to become partners. See below. |
+| `find_events` | `GET /v1/public/events?topics=&products=&limit=` | Upcoming Everpure events and live webinars, dated from their own pages; with topics or products, the ones that fit. See below. |
+| — | `GET /v1/public/events/accelerate` | Pure Accelerate, the flagship event: its latest edition, its pages and highlights. See below. |
 | `find_customer_stories` | `GET /v1/public/customers?industry=&q=&limit=` | **Off unless `PUBLIC_CUSTOMERS_ENABLED` is also set** (whether customer names go to outside agents is still an open decision). See below. |
 
 The reference documents are deliberately **trimmed views**: no changelog notes, no internal
@@ -609,6 +611,28 @@ Everpure's and have their own page on everpuredata.com (21 today):
 `pages` are the program's pages, each with a `track` (`overview`, `apply`, `reseller`, `msp`, `gsi`,
 `alliance`, `services`, `certifications`, `portworx`, `events`), `news` is the latest partner-program
 news from the blog, and `meta` has the Become a Partner and Request Access links.
+
+**Events** (`GET /v1/public/events`) lists Everpure's upcoming events and live webinars, from the event pages
+on everpuredata.com (`/events/…` and `/events/webinars/…`):
+
+- **Dates come from each page's own words** ("June 16-18, 2026", "December 15, 2026", or "Dec. 8-10" with the
+  year from the page's title or address). There's no hand-kept calendar: an event page that states no date
+  isn't listed, and an event drops off the day after it ends. `dateText` is the words the date was read from;
+  times and agendas are on the event pages.
+- **Each event:** `id` (works with `read_artifact`), `title`, `url` (registration is on the page), `kind`
+  (`event` or `webinar`), `start` and `end` (`YYYY-MM-DD`), `place` (a city, or `Online` for a webinar),
+  `topics` and `products`.
+- **Fitted to reading:** pass `topics` and/or `products` (comma-separated slugs, up to eight each) and you
+  get only the events that share them, best fit first (a shared topic counts double a shared product), each
+  with a `fit` score; without them, everything upcoming, soonest first (`fit` is `null`). `limit` 1–10,
+  default 5. `meta.upcoming` counts everything upcoming; `meta.eventsCenter` and `meta.accelerate` are the
+  site's Events Center and Pure Accelerate pages.
+
+**Pure Accelerate** (`GET /v1/public/events/accelerate`) is the flagship event: `edition` is the latest
+edition its pages describe (`year`, `start`, `end`, `place`, and `upcoming`), `pages` are its pages on the
+site, each with a `role` (roadshows and summits, tracks and sessions, training, Partner Forum, FAQs, plan
+your stay, sponsors), and `highlights` are up to six highlight reels, recaps and keynotes, newest first.
+`meta.url` is Accelerate's page on the site, where the mailing list for the next edition lives.
 
 **Customer stories** (`GET /v1/public/customers`) lists named customers that public stories feature,
 newest story first:
