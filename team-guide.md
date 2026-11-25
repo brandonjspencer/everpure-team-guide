@@ -524,6 +524,7 @@ the path** — every response is a database or reference-document lookup, so it 
 | `read_artifact` | `GET /v1/public/artifacts/:id` | One public resource for a reader view: the allowlisted fields plus up to four `takeaways` and up to four `problems`. Never the page body. See below. |
 | `find_similar` | `GET /v1/public/artifacts/:id/similar?limit=` | Public content closest to a given artifact id. May return fewer than `limit` when many of the nearest neighbours are gated. |
 | `recommend_content` | `POST /v1/public/artifacts/recommend` | The recommendation engine (§2.3) over public content only. See below. |
+| `find_partners` | `GET /v1/public/partners?place=&limit=` | Partners who sell Everpure, for a country or region. See below. |
 | `find_customer_stories` | `GET /v1/public/customers?industry=&q=&limit=` | **Off unless `PUBLIC_CUSTOMERS_ENABLED` is also set** (whether customer names go to outside agents is still an open decision). See below. |
 
 The reference documents are deliberately **trimmed views**: no changelog notes, no internal
@@ -576,6 +577,21 @@ content only:
 - **What's held back:** the score breakdown, and engagement as a reason. Traffic never reaches an
   anonymous caller, not even as an explanation.
 - Calls are not written to the recommendation log, and they share the search rate limit.
+
+**Partners** (`GET /v1/public/partners`) lists the partners who sell Everpure, read from the partner
+profile pages on everpuredata.com (resellers, managed service providers, global system integrators):
+
+- **`place`:** a country or region ("Germany", "UK", "EMEA"), or a sentence that names one ("find a
+  partner in Germany"). `limit` 1–50, default 12. Without a place, every partner is listed by name.
+- **Order:** partners who list the place among the countries they sell in (`match: "sells-in"`), then
+  partners who cover its region (`"region"`), then global partners (`"global"`). A region asked for by
+  name has no `sells-in` group.
+- **Each partner:** `id` (works with `read_artifact`), `name`, `url` (their profile page), `kind`,
+  `tier`, `regions`, `countries` (as the partner wrote it) and `website`.
+- **`meta`:** the `place` and `region` read from the request, `askedRegion`, the count in each group, the
+  total, and `directory`: the Partner Finder, which has contact details for every partner.
+- Partner details are partner-provided and unverified; the profiles say so. There's no separate switch:
+  partner profiles are public pages.
 
 **Customer stories** (`GET /v1/public/customers`) lists named customers that public stories feature,
 newest story first:
@@ -845,8 +861,8 @@ the **Pending** tab, where the approver sees what will happen and each field's c
 the queue. The person who proposed a decision can withdraw it while it waits. The web team's own
 decisions apply straight away, logged as proposed and approved by them.
 
-**The queue.** By default, live pieces flagged for review with confidence under 0.6 (702 today),
-lowest first. The near-zero end is mostly pages that shouldn't be in the corpus at all (test
+**The queue.** By default, live pieces flagged for review with confidence under 0.6 (about 500 once
+partner profiles are set aside, below), lowest first. The near-zero end is mostly pages that shouldn't be in the corpus at all (test
 pages, retired pages, confirmation pages, careers pages). Filters switch to the other review reasons (§2.12),
 a content type, public or gated, or a title/URL search. Pieces that haven't been classified yet
 aren't listed.
@@ -866,6 +882,7 @@ taxonomy (§2.6), so a correction can't introduce a new term.
 | Tags look right (`A`) | Clears the flag and locks the tags as shown |
 | Save corrections (`S`) | Writes the changed tags, clears the flag, and locks every tag on the card |
 | Company page (`C`) | Real site content that isn't about products, such as careers pages. Keeps the piece, applies any other tag edits, clears products, solutions, industries and topics and locks them empty, and clears the flag |
+| Partner profile (`P`, partner profiles only, in place of Company page) | Tags it as the partner rule does (below) and locks those tags |
 | Not useful (`N`), then **It's low value** (`1`) | Keeps the piece as it is and clears the flag |
 | Not useful, then **It isn't marketing content** (`2`) | Removes the piece from the corpus: test pages, form steps, 404s |
 | Not useful, then **It's retired or out of date** (`3`) | Removes the piece and puts it on the web team's list |
@@ -883,6 +900,21 @@ crawl collects; a URL pattern is only added to the crawl's skip list after revie
 **Careers pages stay in the corpus** (they were brought in deliberately on 2026-08-31). The card
 says so on careers pieces; choose Company page for them unless one is really about products. On the
 sandbox site, careers questions get a chat answer that sends job seekers to the careers section.
+
+**Partner profiles are handled by one rule.** About 180 of the low-confidence pieces were reseller,
+managed service provider and integrator profiles: short pages about a company that sells Everpure,
+with nothing product-specific to tag. They're their own set in the queue's first filter (**Partner
+profiles**) and are left out of every other set. Each card shows what the page's details block says
+about the partner: name, type and tier, region, the countries it sells in, and its site. The rule gives
+every profile the **Decision** stage, content type Other, and no products, solutions, industries or
+topics; persona, audience and technical depth keep what the classifier said. A web-team key sees
+**Apply to all N profiles** above the list (with a confirm step): it applies the rule to exactly the
+profiles listed, each logged as proposed by `partner-rule` and approved by the person who clicked.
+Reviewers see the rule and can still give any one profile its own decision. New profiles the crawl
+adds later land in the same set. Partner program pages (become a partner, the TAP application,
+certifications) aren't profiles: choose Company page for them. On the sandbox site, "find a partner in
+Germany" gets a chat answer that routes to the Partner Finder, with the partners who sell there in the
+pane (`GET /v1/public/partners`, §2.10); "how do I become a partner?" routes to the partner program.
 
 Locked tags survive reclassification: when the classifier re-tags a piece, the reviewer's values
 win for every field on the card. A reviewed piece only comes back into the queue if its content
@@ -902,10 +934,13 @@ Below that is every event of the last 30 days, which **Download CSV** saves as a
 for a reviewer, `200` and applied for an approver), `GET /v1/review/proposals`,
 `POST /v1/review/proposals/:id/approve`, `/reject` (`{ "note": … }`) and `/withdraw`,
 `POST /v1/review/items/:id/restore`, `GET /v1/review/removed`, `GET /v1/review/log?days=30`,
-`GET /v1/review/stats`, `GET /v1/review/options` and `GET /v1/review/me`. `decision` is one of
-`confirmed`, `corrected` (with `changes`), `company-page` (optionally with `changes`), `low-value` or
-`removed` (with `removalReason`: `not-content` or `retired`). Approving, rejecting and restoring need
-`artifacts:review-approve`.
+`GET /v1/review/stats`, `GET /v1/review/options` and `GET /v1/review/me`, plus the partner rule:
+`GET /v1/review/partner-rule` (the profiles it would tag, with each one's details and the fields it
+would change) and `POST /v1/review/partner-rule/apply` (`{ "ids": [...] }`, the ids previewed).
+`decision` is one of `confirmed`, `corrected` (with `changes`), `company-page` (optionally with
+`changes`), `partner-profile` (partner profiles only), `low-value` or `removed` (with `removalReason`:
+`not-content` or `retired`). The queue's `reason` adds `partner-profiles`. Approving, rejecting,
+restoring and applying the partner rule need `artifacts:review-approve`.
 
 ## 3. The MCP server
 
