@@ -832,11 +832,18 @@ freshness, use `contentAge.stalenessRisk`. `not-scanned` means the full text was
 Everpure Intelligence Triage is a page for product marketing to work through the pieces the classifier was least sure about, one
 at a time: [`/review`](https://everpure-artifact-api.onrender.com/review) on the API's own address.
 
-**Signing in.** Each reviewer has their own key with the `artifacts:review` scope (ask in
-#everpure-intelligence). That scope reaches only `/v1/review/*`: it can't read the catalog
-through the other endpoints or change anything but tags on the pieces it reviews. Every decision
-records the key's name as the reviewer. The page keeps the key for the browser tab, or on the
-device if you tick "Remember on this device".
+**Signing in.** Reviewers sign in with a key that has the `artifacts:review` scope (ask in
+#everpure-intelligence). The web team's keys have `artifacts:review-approve`. Neither scope reaches
+anything outside `/v1/review/*`: they can't read the catalog through the other endpoints. Every step
+records the key's name. The page keeps the key for the browser tab, or on the device if you tick
+"Remember on this device".
+
+**PMM decisions wait for the web team.** A reviewer's decision is a proposal: nothing in the corpus
+changes until someone with the approve scope approves it. The piece leaves the queue and waits in
+the **Pending** tab, where the approver sees what will happen and each field's change, and chooses
+**Approve and apply** (`A`) or **Reject** (`R`, with an optional note), which sends the piece back to
+the queue. The person who proposed a decision can withdraw it while it waits. The web team's own
+decisions apply straight away, logged as proposed and approved by them.
 
 **The queue.** By default, live pieces flagged for review with confidence under 0.6 (702 today),
 lowest first. The near-zero end is mostly pages that shouldn't be in the corpus at all (test
@@ -854,11 +861,11 @@ taxonomy (§2.6), so a correction can't introduce a new term.
 
 **Decisions** (keyboard shortcuts in brackets):
 
-| Decision | What it does |
+| Decision | What it does once approved |
 |---|---|
 | Tags look right (`A`) | Clears the flag and locks the tags as shown |
 | Save corrections (`S`) | Writes the changed tags, clears the flag, and locks every tag on the card |
-| Company page (`C`) | Real site content that isn't about products, such as careers pages. Keeps the piece, clears products, solutions, industries and topics and locks them empty, and clears the flag |
+| Company page (`C`) | Real site content that isn't about products, such as careers pages. Keeps the piece, applies any other tag edits, clears products, solutions, industries and topics and locks them empty, and clears the flag |
 | Not useful (`N`), then **It's low value** (`1`) | Keeps the piece as it is and clears the flag |
 | Not useful, then **It isn't marketing content** (`2`) | Removes the piece from the corpus: test pages, form steps, 404s |
 | Not useful, then **It's retired or out of date** (`3`) | Removes the piece and puts it on the web team's list |
@@ -866,11 +873,11 @@ taxonomy (§2.6), so a correction can't introduce a new term.
 
 **Removing a piece** is a soft delete: every read (browse, search, recommendations, MCP, the public
 surface) stops returning it, the record is kept, and the daily crawl doesn't bring it back. It's
-reversible: "Undo" on the confirmation, or "Undo removal" on the piece in the History tab, puts it
-back in the corpus and the queue. Triage can only restore what triage removed. Removed pages are
-usually still published on everpuredata.com, so the History tab keeps a count of them and
-**Copy the list for the web team** copies title, URL, reason, note, reviewer and date as rows that
-paste into a sheet, Slack or an email (`GET /v1/review/removed`). Removals don't change what the
+reversible by the web team: "Undo" on the approval, or "Undo removal" on the piece in the Log tab,
+puts it back in the corpus and the queue. Triage can only restore what triage removed. Removed pages
+are usually still published on everpuredata.com, so the Log tab keeps a count of them and
+**Copy the list for the web team** copies title, URL, reason, note, who proposed, who approved and
+the date as rows that paste into a sheet, Slack or an email (`GET /v1/review/removed`). Removals don't change what the
 crawl collects; a URL pattern is only added to the crawl's skip list after review, by PR.
 
 **Careers pages stay in the corpus** (they were brought in deliberately on 2026-08-31). The card
@@ -879,18 +886,26 @@ sandbox site, careers questions get a chat answer that sends job seekers to the 
 
 Locked tags survive reclassification: when the classifier re-tags a piece, the reviewer's values
 win for every field on the card. A reviewed piece only comes back into the queue if its content
-changes; even then the reviewer's tags stay until someone reviews it again. Each decision is in
-`GET /artifacts/:id/history` (`human_review`, with the decision, the fields changed and the note),
-and the reviewer's values are in the artifact's `manualOverrides`. The page's History tab lists the
-latest 30 decisions by anyone.
+changes; even then the reviewer's tags stay until someone reviews it again.
+
+**The log and the numbers.** Every step is recorded in the piece's history
+(`GET /artifacts/:id/history`): `review_proposed` for a proposal, `review_resolved` for its approval,
+rejection or withdrawal, and `human_review` for the change actually applied, with who proposed and
+who approved it. The page's **Log** tab shows what's been triaged: progress through the
+low-confidence queue, how many pieces ended in each outcome, how many proposals are waiting,
+approved, rejected or withdrawn, decisions per day for the last 14 days, and counts per reviewer.
+Below that is every event of the last 30 days, which **Download CSV** saves as a file.
 
 **For scripts.** The page's API is documented under the `review` tag in [`/docs`](https://everpure-artifact-api.onrender.com/docs):
 `GET /v1/review/queue`, `GET /v1/review/items/:id`, `POST /v1/review/items/:id/decision`
-(`{ "decision": …, "changes": {…}, "removalReason": …, "note": "…" }`),
-`POST /v1/review/items/:id/restore`, `GET /v1/review/removed`, `GET /v1/review/options`,
-`GET /v1/review/me` and `GET /v1/review/recent`. `decision` is one of `confirmed`, `corrected`
-(with `changes`), `company-page`, `low-value` or `removed` (with `removalReason`: `not-content` or
-`retired`).
+(`{ "decision": …, "changes": {…}, "removalReason": …, "note": "…" }`; `202` with a `proposalId`
+for a reviewer, `200` and applied for an approver), `GET /v1/review/proposals`,
+`POST /v1/review/proposals/:id/approve`, `/reject` (`{ "note": … }`) and `/withdraw`,
+`POST /v1/review/items/:id/restore`, `GET /v1/review/removed`, `GET /v1/review/log?days=30`,
+`GET /v1/review/stats`, `GET /v1/review/options` and `GET /v1/review/me`. `decision` is one of
+`confirmed`, `corrected` (with `changes`), `company-page` (optionally with `changes`), `low-value` or
+`removed` (with `removalReason`: `not-content` or `retired`). Approving, rejecting and restoring need
+`artifacts:review-approve`.
 
 ## 3. The MCP server
 
