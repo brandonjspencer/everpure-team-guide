@@ -659,13 +659,14 @@ page, so a site or agent can show the piece itself rather than a summary of it:
 
 - **What comes back:** `artifact` (as above) and `page`, which holds `lede`, `byline` and
   `sections`. Each section is a heading and its blocks (`p`, `lead`, `figures`, `compare`, `traits`,
-  `items`, `two`, `steps`, `quote`). A recorded session also has `chapters` (`t` in seconds,
+  `items`, `two`, `steps`, `quote`, and on data sheets `specs`: the specifications table, one row per
+  value as printed, with our label for it). A recorded session also has `chapters` (`t` in seconds,
   `title`) and `chaptersBy` (`page` or `drafted`). Alongside the page: `template`, `format`,
   `minutes`, `status` (`ok`, or `partial` when the build removed some fields), `reviewState`,
   `current` and `version`.
-- **Whose words:** every passage, list item, figure value and quote is the piece's own text,
-  checked word for word against it when the page was built. Section headings, figure labels,
-  comparison headers, card titles and drafted chapter titles are ours. `reviewState` says whether
+- **Whose words:** every passage, list item, figure value, spec value and quote is the piece's own
+  text, checked word for word against it when the page was built. Section headings, figure labels,
+  spec labels, comparison headers, card titles and drafted chapter titles are ours. `reviewState` says whether
   product marketing has approved them yet (`unreviewed` or `approved`).
 - **Freshness:** `current` is `false` when the piece's text has changed since its page was built.
   The page is still served; a client that wants only current pages can check the flag.
