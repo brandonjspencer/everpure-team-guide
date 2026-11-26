@@ -654,12 +654,44 @@ without sending the visitor away:
 - **Not found:** gated, retired, newly gated or excluded pages are a `404`, the same as an unknown id.
 - It shares the read rate limit.
 
+**Page** (`GET /v1/public/artifacts/:id/page`) returns the piece rebuilt as a structured reading
+page, so a site or agent can show the piece itself rather than a summary of it:
+
+- **What comes back:** `artifact` (as above) and `page`, which holds `lede`, `byline` and
+  `sections`. Each section is a heading and its blocks (`p`, `lead`, `figures`, `compare`, `traits`,
+  `items`, `two`, `steps`, `quote`). A recorded session also has `chapters` (`t` in seconds,
+  `title`) and `chaptersBy` (`page` or `drafted`). Alongside the page: `template`, `format`,
+  `minutes`, `status` (`ok`, or `partial` when the build removed some fields), `reviewState`,
+  `current` and `version`.
+- **Whose words:** every passage, list item, figure value and quote is the piece's own text,
+  checked word for word against it when the page was built. Section headings, figure labels,
+  comparison headers, card titles and drafted chapter titles are ours. `reviewState` says whether
+  product marketing has approved them yet (`unreviewed` or `approved`).
+- **Freshness:** `current` is `false` when the piece's text has changed since its page was built.
+  The page is still served; a client that wants only current pages can check the flag.
+- **Not found:** the same cases as the reader, plus a piece with no page yet (the extraction run
+  fills them in) or a page rejected in review.
+- It shares the read rate limit, and isn't on the agent card yet.
+
+**Transcript** (`GET /v1/public/artifacts/:id/transcript`) returns the timestamped transcript a
+public video, webinar, demo or event page publishes:
+
+- **What comes back:** `lines`, each with `t` (seconds from the start) and `text` exactly as
+  published, and `chapters`: the page's own chapter list (`t`, `title`), or `[]` when it doesn't
+  publish one.
+- **Where it comes from:** it's recovered from the page's stored text. A time inside a sentence
+  ("by 9:02 AM") stays part of its passage. About 427 of 776 public video-type pieces have one;
+  gated webinars usually don't.
+- **Not found:** the same cases as the reader, plus any other type of piece, or a page with fewer
+  than three timestamped passages.
+- It shares the read rate limit, and isn't on the agent card.
+
 Some pages are public and live but answer no question an agent asks — thank-you and "Registration
 Confirmed" pages, `/forms/…`, the meeting-scheduler page, the 404 page, a stray test page, a
-partner practical-exam outline, and pages an editor has titled "RETIRED –" or "DO NOT USE –" but
-left published. Search and `/similar` leave them out, **and only the pages on an explicit reviewed
+partner practical-exam outline, pages an editor has titled "RETIRED –" or "DO NOT USE –" but
+left published, and an empty, misspelled duplicate of a customer story. Search and `/similar` leave them out, **and only the pages on an explicit reviewed
 list are left out**: [`src/config/publicExclusions.json`](https://github.com/brandonjspencer/everpure-artifact-intelligence/blob/main/src/config/publicExclusions.json)
-(16 of roughly 3,900 public pages today), each entry a URL and a reason. Matching ignores scheme,
+(17 of roughly 3,900 public pages today), each entry a URL and a reason. Matching ignores scheme,
 host case, a trailing slash and any query string or fragment. Nothing is hidden by pattern, so a
 real article can never vanish because its title or URL happens to look like a form step. Real
 content filed as `artifactType=other` is not on the list: the Evergreen program description,
