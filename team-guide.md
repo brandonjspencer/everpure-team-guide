@@ -361,16 +361,23 @@ Committee-persona coverage, current buying-committee taxonomy (§2.1):
 
 ### 2.6 Taxonomy & vocabularies
 
-- `GET /taxonomy` — the 220 canonical product/solution/industry/topic/job-function slugs. Since 2026-09-04
+- `GET /taxonomy` — the 224 canonical product/solution/industry/topic/job-function slugs. Since 2026-09-04
   this includes FlashArray/FlashBlade/Purity model slugs (`flasharray-x`, `flashblade-s`, `purity-fa`…) and
   partner/platform solutions (`azure`, `nutanix`, `nvidia`, `red-hat-openshift`, `sap-hana`, `sql-server`,
-  `oracle-database`, `openstack`, `ai-factory`, `threat-detection`…). `storage-as-a-service` is now a
+  `oracle-database`, `openstack`, `ai-factory`, `threat-detection`…) and, since 2026-11-26, `aws`. `storage-as-a-service` is now a
   **product** slug only (it was a solution slug before 2026-09-04; the rows were migrated). Terms carry a `parentSlug` where they
   are a model child or an umbrella (e.g. `flasharray-x` → `flasharray`, `hybrid-cloud` → `cloud`). The
   corpus-wide reclassify to pick up these slugs finished 2026-09-08 — 4,371 of 4,403 live artifacts
   (99.3%) now carry them. The remaining 32 are pages that became gated mid-drain (`newly-gated`),
   which the reclassify batch deliberately skips; they'll pick up the new taxonomy on their next
   refresh once gating is confirmed.
+- **Added 2026-11-26, from the terms the classifier kept flagging as missing:** the topics `data-primacy` and
+  `model-context-protocol`, the solution `aws` and the industry `electronic-design-automation` (Semiconductor & EDA).
+  These four are also tagged on a rule, whatever the model picks: a piece is tagged when the name is in its title
+  (or description) or it uses it often enough to be about it (data primacy twice, MCP five times, EDA ten times,
+  AWS twenty), so a passing mention doesn't count. Pieces from before then were tagged by the same rule: 26 for
+  data primacy, 27 for MCP, 75 for AWS, 9 for EDA. Terms like DORA, NIST CSF, IAM/MFA, SOAR and "internet of
+  things" now resolve to `compliance`, `data-security`, `cybersecurity` and `edge-computing`.
 - `GET /taxonomy/coverage` — artifact counts per taxonomy value
 - `GET /taxonomy/stage-crosswalk` — the canonical translation between the three stage
   vocabularies (buying-process phases ↔ JTBD timeline ↔ funnel stages), each phase with its
